@@ -1,4 +1,9 @@
-
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Treinador de Inglês</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap');
   *{box-sizing:border-box;margin:0;padding:0;}
@@ -173,6 +178,8 @@
   .type-choice-btn .nm{font-family:var(--fh);font-size:0.9rem;font-weight:700;margin-bottom:0.15rem;}
   .type-choice-btn .ds{font-size:0.72rem;color:var(--text3);}
 </style>
+</head>
+<body>
 
 <div class="app">
   <div class="header"><h1>Treinador de Inglês</h1></div>
@@ -396,7 +403,7 @@
       <div class="stitle">💾 Backup e Restauração</div>
       <div class="backup-info">
         <strong>Por que fazer backup?</strong><br>
-        Seus dados ficam salvos automaticamente, mas baixar um backup garante que você nunca perderá seu progresso. Guarde o arquivo em um lugar seguro. Para restaurar, basta importar o arquivo aqui.
+        Seus dados ficam salvos automaticamente no seu navegador, mas baixar um backup garante que você nunca perderá seu progresso. Guarde o arquivo em um lugar seguro. Para restaurar, basta importar o arquivo aqui.
       </div>
       <div style="margin-bottom:1.5rem">
         <h4 style="font-family:var(--fh);font-size:1rem;margin-bottom:0.5rem">📤 Exportar backup</h4>
@@ -420,506 +427,544 @@
 <div class="toast" id="toast"></div>
 
 <script>
-const SK='eng_trainer_v2_data';
-let S={blocks:[],curBlock:null,curSub:0};
-let Q={block:null,scope:'full',subNum:1,dir:'en',mode:'quiz',words:[],idx:0,correct:0,wrong:0,answered:false,newQ:0,newT:0};
-let promptType='narrative';
+// ============================================
+// PERSISTÊNCIA: usa localStorage do navegador
+// Os dados ficam salvos mesmo após fechar/recarregar
+// ============================================
+const SK = 'eng_trainer_v2_data';
 
-const MAX=3;
-const stars=n=>n===0?'⬜⬜⬜':n===1?'⭐⬜⬜':n===2?'⭐⭐⬜':'⭐⭐⭐';
-const domPct=(words,mode)=>{if(!words||!words.length)return 0;const k=mode==='quiz'?'starsQ':'starsT';const t=words.reduce((s,w)=>s+(w[k]||0),0);return Math.round((t/(words.length*MAX))*100);};
+let S = { blocks: [], curBlock: null, curSub: 0 };
+let Q = { block: null, scope: 'full', subNum: 1, dir: 'en', mode: 'quiz', words: [], idx: 0, correct: 0, wrong: 0, answered: false, newQ: 0, newT: 0 };
+let promptType = 'narrative';
 
-async function load(){try{const r=await window.storage.get(SK);if(r?.value)S={...S,...JSON.parse(r.value)};}catch(e){}renderBlocks();updateBackupStatus();}
-async function save(){try{await window.storage.set(SK,JSON.stringify({blocks:S.blocks}));}catch(e){}}
-const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
-const shuffle=a=>[...a].sort(()=>Math.random()-0.5);
+const MAX = 3;
+const stars = n => n === 0 ? '⬜⬜⬜' : n === 1 ? '⭐⬜⬜' : n === 2 ? '⭐⭐⬜' : '⭐⭐⭐';
+const domPct = (words, mode) => {
+  if (!words || !words.length) return 0;
+  const k = mode === 'quiz' ? 'starsQ' : 'starsT';
+  const t = words.reduce((s, w) => s + (w[k] || 0), 0);
+  return Math.round((t / (words.length * MAX)) * 100);
+};
 
-function click_go(n){snd('nav');go(n);}
-function go(name){
-  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
-  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
-  const nm={blocks:0,'quiz-home':1,words:2,stats:3,backup:4};
-  if(name in nm)document.querySelectorAll('.nav-btn')[nm[name]].classList.add('active');
-  const sid={'block-detail':'s-block-detail','quiz-home':'s-quiz-home','quiz':'s-quiz','type':'s-type','quiz-result':'s-quiz-result'}[name]||'s-'+name;
+// CARREGA os dados salvos no localStorage ao iniciar
+function load() {
+  try {
+    const raw = localStorage.getItem(SK);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      S = { ...S, ...parsed };
+    }
+  } catch (e) {
+    console.error('Erro ao carregar dados:', e);
+  }
+  renderBlocks();
+  updateBackupStatus();
+}
+
+// SALVA os dados no localStorage sempre que algo muda
+function save() {
+  try {
+    localStorage.setItem(SK, JSON.stringify({ blocks: S.blocks }));
+  } catch (e) {
+    console.error('Erro ao salvar dados:', e);
+    toast('Erro ao salvar! Espaço cheio?', 'error');
+  }
+}
+
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const shuffle = a => [...a].sort(() => Math.random() - 0.5);
+
+function click_go(n) { snd('nav'); go(n); }
+function go(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  const nm = { blocks: 0, 'quiz-home': 1, words: 2, stats: 3, backup: 4 };
+  if (name in nm) document.querySelectorAll('.nav-btn')[nm[name]].classList.add('active');
+  const sid = { 'block-detail': 's-block-detail', 'quiz-home': 's-quiz-home', 'quiz': 's-quiz', 'type': 's-type', 'quiz-result': 's-quiz-result' }[name] || 's-' + name;
   document.getElementById(sid)?.classList.add('active');
-  if(name==='words')renderAll();
-  else if(name==='stats')renderStats();
-  else if(name==='block-detail')renderDetail();
-  else if(name==='blocks')renderBlocks();
-  else if(name==='quiz-home')renderQuizHome();
-  else if(name==='backup')updateBackupStatus();
+  if (name === 'words') renderAll();
+  else if (name === 'stats') renderStats();
+  else if (name === 'block-detail') renderDetail();
+  else if (name === 'blocks') renderBlocks();
+  else if (name === 'quiz-home') renderQuizHome();
+  else if (name === 'backup') updateBackupStatus();
 }
 
-function renderBlocks(){
-  const g=document.getElementById('blocks-grid');
-  if(!S.blocks.length){g.innerHTML='<div class="empty" style="grid-column:1/-1"><div style="font-size:2rem">📚</div><p>Nenhum bloco criado ainda!</p></div>';return;}
-  g.innerHTML=S.blocks.map(b=>{
-    const t=(b.words||[]).length,p=Math.round((t/100)*100);
-    const dq=domPct(b.words,'quiz'),dt=domPct(b.words,'type');
-    const mastered=dq===100&&dt===100;
-    return '<div class="bcard" onclick="snd(\'click\');openBlock(\''+b.id+'\')"><button class="dbtn" onclick="event.stopPropagation();snd(\'click\');delBlock(\''+b.id+'\')">✕</button>'
-      +'<h3>'+b.name+(mastered?'<span class="mastered-badge">✓ Dominado</span>':'')+'</h3>'
-      +'<p>'+t+'/100 palavras</p>'
-      +'<div style="margin-top:0.5rem"><div class="pbw" style="margin-bottom:2px"><div class="pb" style="width:'+p+'%"></div></div></div>'
-      +'<div class="dom-split"><span class="dom-chip dom-chip-q">🔤 '+dq+'%</span><span class="dom-chip dom-chip-t">⌨️ '+dt+'%</span></div></div>';
-  }).join('')+'<div><button class="add-btn" onclick="snd(\'click\');openNewBlock()">+ Criar novo bloco</button></div>';
+function renderBlocks() {
+  const g = document.getElementById('blocks-grid');
+  if (!S.blocks.length) {
+    g.innerHTML = '<div class="empty" style="grid-column:1/-1"><div style="font-size:2rem">📚</div><p>Nenhum bloco criado ainda!</p></div>';
+    return;
+  }
+  g.innerHTML = S.blocks.map(b => {
+    const t = (b.words || []).length, p = Math.round((t / 100) * 100);
+    const dq = domPct(b.words, 'quiz'), dt = domPct(b.words, 'type');
+    const mastered = dq === 100 && dt === 100;
+    return '<div class="bcard" onclick="snd(\'click\');openBlock(\'' + b.id + '\')"><button class="dbtn" onclick="event.stopPropagation();snd(\'click\');delBlock(\'' + b.id + '\')">✕</button>'
+      + '<h3>' + b.name + (mastered ? '<span class="mastered-badge">✓ Dominado</span>' : '') + '</h3>'
+      + '<p>' + t + '/100 palavras</p>'
+      + '<div style="margin-top:0.5rem"><div class="pbw" style="margin-bottom:2px"><div class="pb" style="width:' + p + '%"></div></div></div>'
+      + '<div class="dom-split"><span class="dom-chip dom-chip-q">🔤 ' + dq + '%</span><span class="dom-chip dom-chip-t">⌨️ ' + dt + '%</span></div></div>';
+  }).join('') + '<div><button class="add-btn" onclick="snd(\'click\');openNewBlock()">+ Criar novo bloco</button></div>';
 }
 
-function openBlock(id){S.curBlock=id;S.curSub=0;go('block-detail');}
-function renderDetail(){
-  const b=S.blocks.find(x=>x.id===S.curBlock);if(!b)return;
-  document.getElementById('bd-title').textContent=b.name;
-  const t=(b.words||[]).length;
-  document.getElementById('bd-pb').style.width=Math.min(100,Math.round((t/100)*100))+'%';
-  document.getElementById('bd-lbl').textContent=t+'/100 palavras';
-  const dq=domPct(b.words,'quiz'),dt=domPct(b.words,'type');
-  document.getElementById('bd-dom-q').textContent=dq+'%';document.getElementById('bd-pb-q').style.width=dq+'%';
-  document.getElementById('bd-dom-t').textContent=dt+'%';document.getElementById('bd-pb-t').style.width=dt+'%';
+function openBlock(id) { S.curBlock = id; S.curSub = 0; go('block-detail'); }
+function renderDetail() {
+  const b = S.blocks.find(x => x.id === S.curBlock); if (!b) return;
+  document.getElementById('bd-title').textContent = b.name;
+  const t = (b.words || []).length;
+  document.getElementById('bd-pb').style.width = Math.min(100, Math.round((t / 100) * 100)) + '%';
+  document.getElementById('bd-lbl').textContent = t + '/100 palavras';
+  const dq = domPct(b.words, 'quiz'), dt = domPct(b.words, 'type');
+  document.getElementById('bd-dom-q').textContent = dq + '%'; document.getElementById('bd-pb-q').style.width = dq + '%';
+  document.getElementById('bd-dom-t').textContent = dt + '%'; document.getElementById('bd-pb-t').style.width = dt + '%';
   renderWords();
 }
-function setSub(sub,el){
-  S.curSub=sub;
-  document.querySelectorAll('.stab').forEach(t=>t.classList.remove('active'));
+function setSub(sub, el) {
+  S.curSub = sub;
+  document.querySelectorAll('.stab').forEach(t => t.classList.remove('active'));
   el.classList.add('active');
-  const show=sub===0?'none':'inline-block';
-  document.getElementById('reset-sub-btn').style.display=show;
-  document.getElementById('prompt-sub-btn').style.display=show;
+  const show = sub === 0 ? 'none' : 'inline-block';
+  document.getElementById('reset-sub-btn').style.display = show;
+  document.getElementById('prompt-sub-btn').style.display = show;
   renderWords();
 }
-function renderWords(){
-  const b=S.blocks.find(x=>x.id===S.curBlock),l=document.getElementById('word-list');
-  if(!b||(b.words||[]).length===0){l.innerHTML='<div class="empty"><p>Nenhuma palavra ainda.</p></div>';return;}
-  const ws=S.curSub===0?b.words:b.words.filter(w=>w.sub===S.curSub);
-  if(!ws.length){l.innerHTML='<div class="empty"><p>Nenhuma palavra neste sub-bloco.</p></div>';return;}
-  l.innerHTML=ws.map(w=>{
-    const hasProgress=(w.starsQ||0)>0||(w.starsT||0)>0;
-    return '<div class="witem"><span class="wen">'+w.en+'</span><span class="wpt">'+w.pt+'</span><span class="wsub">Sub '+w.sub+'</span>'
-      +'<div class="wdom"><div class="wdom-row"><span class="wdom-label">🔤</span><span>'+stars(w.starsQ||0)+'</span></div>'
-      +'<div class="wdom-row"><span class="wdom-label">⌨️</span><span>'+stars(w.starsT||0)+'</span></div></div>'
-      +'<div class="wact">'
-      +(hasProgress?'<button class="icon-btn reset" title="Zerar progresso" onclick="snd(\'click\');resetWord(\''+w.id+'\')">↺</button>':'')
-      +'<button class="icon-btn danger" title="Apagar palavra" onclick="snd(\'click\');delWord(\''+w.id+'\')">✕</button></div></div>';
+function renderWords() {
+  const b = S.blocks.find(x => x.id === S.curBlock), l = document.getElementById('word-list');
+  if (!b || (b.words || []).length === 0) { l.innerHTML = '<div class="empty"><p>Nenhuma palavra ainda.</p></div>'; return; }
+  const ws = S.curSub === 0 ? b.words : b.words.filter(w => w.sub === S.curSub);
+  if (!ws.length) { l.innerHTML = '<div class="empty"><p>Nenhuma palavra neste sub-bloco.</p></div>'; return; }
+  l.innerHTML = ws.map(w => {
+    const hasProgress = (w.starsQ || 0) > 0 || (w.starsT || 0) > 0;
+    return '<div class="witem"><span class="wen">' + w.en + '</span><span class="wpt">' + w.pt + '</span><span class="wsub">Sub ' + w.sub + '</span>'
+      + '<div class="wdom"><div class="wdom-row"><span class="wdom-label">🔤</span><span>' + stars(w.starsQ || 0) + '</span></div>'
+      + '<div class="wdom-row"><span class="wdom-label">⌨️</span><span>' + stars(w.starsT || 0) + '</span></div></div>'
+      + '<div class="wact">'
+      + (hasProgress ? '<button class="icon-btn reset" title="Zerar progresso" onclick="snd(\'click\');resetWord(\'' + w.id + '\')">↺</button>' : '')
+      + '<button class="icon-btn danger" title="Apagar palavra" onclick="snd(\'click\');delWord(\'' + w.id + '\')">✕</button></div></div>';
   }).join('');
 }
-function renderAll(){
-  const q=(document.getElementById('search').value||'').toLowerCase();
-  let all=[];S.blocks.forEach(b=>(b.words||[]).forEach(w=>all.push({...w,bn:b.name,bid:b.id})));
-  if(q)all=all.filter(w=>w.en.toLowerCase().includes(q)||w.pt.toLowerCase().includes(q));
-  const l=document.getElementById('all-list');
-  if(!all.length){l.innerHTML='<div class="empty"><p>Nenhuma palavra encontrada.</p></div>';return;}
-  l.innerHTML=all.map(w=>{
-    const hasProgress=(w.starsQ||0)>0||(w.starsT||0)>0;
-    return '<div class="witem"><span class="wen">'+w.en+'</span><span class="wpt">'+w.pt+'</span><span class="wsub">'+w.bn+'/Sub '+w.sub+'</span>'
-      +'<div class="wdom"><div class="wdom-row"><span class="wdom-label">🔤</span><span>'+stars(w.starsQ||0)+'</span></div>'
-      +'<div class="wdom-row"><span class="wdom-label">⌨️</span><span>'+stars(w.starsT||0)+'</span></div></div>'
-      +'<div class="wact">'
-      +(hasProgress?'<button class="icon-btn reset" title="Zerar progresso" onclick="snd(\'click\');resetWordG(\''+w.bid+'\',\''+w.id+'\')">↺</button>':'')
-      +'<button class="icon-btn danger" title="Apagar palavra" onclick="snd(\'click\');delWordG(\''+w.bid+'\',\''+w.id+'\')">✕</button></div></div>';
+function renderAll() {
+  const q = (document.getElementById('search').value || '').toLowerCase();
+  let all = []; S.blocks.forEach(b => (b.words || []).forEach(w => all.push({ ...w, bn: b.name, bid: b.id })));
+  if (q) all = all.filter(w => w.en.toLowerCase().includes(q) || w.pt.toLowerCase().includes(q));
+  const l = document.getElementById('all-list');
+  if (!all.length) { l.innerHTML = '<div class="empty"><p>Nenhuma palavra encontrada.</p></div>'; return; }
+  l.innerHTML = all.map(w => {
+    const hasProgress = (w.starsQ || 0) > 0 || (w.starsT || 0) > 0;
+    return '<div class="witem"><span class="wen">' + w.en + '</span><span class="wpt">' + w.pt + '</span><span class="wsub">' + w.bn + '/Sub ' + w.sub + '</span>'
+      + '<div class="wdom"><div class="wdom-row"><span class="wdom-label">🔤</span><span>' + stars(w.starsQ || 0) + '</span></div>'
+      + '<div class="wdom-row"><span class="wdom-label">⌨️</span><span>' + stars(w.starsT || 0) + '</span></div></div>'
+      + '<div class="wact">'
+      + (hasProgress ? '<button class="icon-btn reset" title="Zerar progresso" onclick="snd(\'click\');resetWordG(\'' + w.bid + '\',\'' + w.id + '\')">↺</button>' : '')
+      + '<button class="icon-btn danger" title="Apagar palavra" onclick="snd(\'click\');delWordG(\'' + w.bid + '\',\'' + w.id + '\')">✕</button></div></div>';
   }).join('');
 }
-function renderStats(){
-  let tot=0,domQ=0,domT=0;
-  S.blocks.forEach(b=>(b.words||[]).forEach(w=>{tot++;if((w.starsQ||0)>=MAX)domQ++;if((w.starsT||0)>=MAX)domT++;}));
-  document.getElementById('st-total').textContent=tot;
-  document.getElementById('st-quiz-dom').textContent=domQ;
-  document.getElementById('st-type-dom').textContent=domT;
-  document.getElementById('st-detail').innerHTML=S.blocks.map(b=>{
-    const c=(b.words||[]).length,p=Math.min(100,Math.round((c/100)*100));
-    const dq=domPct(b.words,'quiz'),dt=domPct(b.words,'type');
-    const subs=[1,2,3,4,5].map(s=>{const sw=(b.words||[]).filter(w=>w.sub===s);return {count:sw.length,dq:domPct(sw,'quiz'),dt:domPct(sw,'type')};});
+function renderStats() {
+  let tot = 0, domQ = 0, domT = 0;
+  S.blocks.forEach(b => (b.words || []).forEach(w => { tot++; if ((w.starsQ || 0) >= MAX) domQ++; if ((w.starsT || 0) >= MAX) domT++; }));
+  document.getElementById('st-total').textContent = tot;
+  document.getElementById('st-quiz-dom').textContent = domQ;
+  document.getElementById('st-type-dom').textContent = domT;
+  document.getElementById('st-detail').innerHTML = S.blocks.map(b => {
+    const c = (b.words || []).length, p = Math.min(100, Math.round((c / 100) * 100));
+    const dq = domPct(b.words, 'quiz'), dt = domPct(b.words, 'type');
+    const subs = [1, 2, 3, 4, 5].map(s => { const sw = (b.words || []).filter(w => w.sub === s); return { count: sw.length, dq: domPct(sw, 'quiz'), dt: domPct(sw, 'type') }; });
     return '<div style="margin-bottom:1.25rem">'
-      +'<div class="fbetween" style="margin-bottom:4px"><span style="font-size:0.85rem;font-weight:500">'+b.name+'</span><span style="font-size:0.75rem;color:var(--text2)">'+c+'/100</span></div>'
-      +'<div class="pbw" style="margin-bottom:6px"><div class="pb" style="width:'+p+'%"></div></div>'
-      +'<div class="dom-label"><span style="color:var(--accent)">🔤 Quiz</span><span>'+dq+'%</span></div>'
-      +'<div class="pbw" style="margin-bottom:6px"><div class="pb" style="width:'+dq+'%"></div></div>'
-      +'<div class="dom-label"><span style="color:var(--accent2)">⌨️ Digitação</span><span>'+dt+'%</span></div>'
-      +'<div class="pbw" style="margin-bottom:6px"><div class="pb pb-gold" style="width:'+dt+'%"></div></div>'
-      +'<div class="sub-dom-grid">'+subs.map((s,i)=>'<div class="sub-dom"><div class="sub-dom-name">Sub '+(i+1)+'</div>'
-        +'<div style="font-size:0.7rem;color:var(--accent)">Q:'+s.dq+'%</div>'
-        +'<div style="font-size:0.7rem;color:var(--accent2)">D:'+s.dt+'%</div></div>').join('')+'</div></div>';
-  }).join('')||'<div class="empty"><p>Nenhum bloco ainda.</p></div>';
+      + '<div class="fbetween" style="margin-bottom:4px"><span style="font-size:0.85rem;font-weight:500">' + b.name + '</span><span style="font-size:0.75rem;color:var(--text2)">' + c + '/100</span></div>'
+      + '<div class="pbw" style="margin-bottom:6px"><div class="pb" style="width:' + p + '%"></div></div>'
+      + '<div class="dom-label"><span style="color:var(--accent)">🔤 Quiz</span><span>' + dq + '%</span></div>'
+      + '<div class="pbw" style="margin-bottom:6px"><div class="pb" style="width:' + dq + '%"></div></div>'
+      + '<div class="dom-label"><span style="color:var(--accent2)">⌨️ Digitação</span><span>' + dt + '%</span></div>'
+      + '<div class="pbw" style="margin-bottom:6px"><div class="pb pb-gold" style="width:' + dt + '%"></div></div>'
+      + '<div class="sub-dom-grid">' + subs.map((s, i) => '<div class="sub-dom"><div class="sub-dom-name">Sub ' + (i + 1) + '</div>'
+        + '<div style="font-size:0.7rem;color:var(--accent)">Q:' + s.dq + '%</div>'
+        + '<div style="font-size:0.7rem;color:var(--accent2)">D:' + s.dt + '%</div></div>').join('') + '</div></div>';
+  }).join('') || '<div class="empty"><p>Nenhum bloco ainda.</p></div>';
 }
 
-function addWord(){
-  const en=document.getElementById('nw-en').value.trim();
-  const pt=document.getElementById('nw-pt').value.trim();
-  const sub=parseInt(document.getElementById('nw-sub').value);
-  if(!en||!pt){toast('Preencha a palavra e o significado.','error');return;}
-  const b=S.blocks.find(x=>x.id===S.curBlock);if(!b)return;
-  if(!b.words)b.words=[];
-  if(b.words.length>=100){toast('Bloco já tem 100 palavras!','error');return;}
-  b.words.push({id:uid(),en,pt,sub,starsQ:0,starsT:0});
-  document.getElementById('nw-en').value='';document.getElementById('nw-pt').value='';
-  save();renderDetail();toast('"'+en+'" adicionada!','success');snd('add');
+function addWord() {
+  const en = document.getElementById('nw-en').value.trim();
+  const pt = document.getElementById('nw-pt').value.trim();
+  const sub = parseInt(document.getElementById('nw-sub').value);
+  if (!en || !pt) { toast('Preencha a palavra e o significado.', 'error'); return; }
+  const b = S.blocks.find(x => x.id === S.curBlock); if (!b) return;
+  if (!b.words) b.words = [];
+  if (b.words.length >= 100) { toast('Bloco já tem 100 palavras!', 'error'); return; }
+  b.words.push({ id: uid(), en, pt, sub, starsQ: 0, starsT: 0 });
+  document.getElementById('nw-en').value = ''; document.getElementById('nw-pt').value = '';
+  save(); renderDetail(); toast('"' + en + '" adicionada!', 'success'); snd('add');
 }
-function delWord(wid){const b=S.blocks.find(x=>x.id===S.curBlock);if(!b)return;b.words=b.words.filter(w=>w.id!==wid);save();renderDetail();snd('del');}
-function delWordG(bid,wid){const b=S.blocks.find(x=>x.id===bid);if(!b)return;b.words=b.words.filter(w=>w.id!==wid);save();renderAll();snd('del');}
+function delWord(wid) { const b = S.blocks.find(x => x.id === S.curBlock); if (!b) return; b.words = b.words.filter(w => w.id !== wid); save(); renderDetail(); snd('del'); }
+function delWordG(bid, wid) { const b = S.blocks.find(x => x.id === bid); if (!b) return; b.words = b.words.filter(w => w.id !== wid); save(); renderAll(); snd('del'); }
 
-function resetWord(wid){
-  const b=S.blocks.find(x=>x.id===S.curBlock);if(!b)return;
-  const w=(b.words||[]).find(x=>x.id===wid);if(!w)return;
+function resetWord(wid) {
+  const b = S.blocks.find(x => x.id === S.curBlock); if (!b) return;
+  const w = (b.words || []).find(x => x.id === wid); if (!w) return;
   openModal('Zerar progresso da palavra',
-    '<p style="color:var(--text2);font-size:0.9rem">Zerar todas as estrelas (Quiz e Digitação) de <strong style="color:var(--text)">"'+w.en+'"</strong>?</p>',
-    '<button class="btn bs" onclick="snd(\'click\');closeModal()">Cancelar</button><button class="btn b-reset" onclick="snd(\'click\');confirmResetWord(\''+S.curBlock+'\',\''+wid+'\',\'detail\')">Zerar</button>');
+    '<p style="color:var(--text2);font-size:0.9rem">Zerar todas as estrelas (Quiz e Digitação) de <strong style="color:var(--text)">"' + w.en + '"</strong>?</p>',
+    '<button class="btn bs" onclick="snd(\'click\');closeModal()">Cancelar</button><button class="btn b-reset" onclick="snd(\'click\');confirmResetWord(\'' + S.curBlock + '\',\'' + wid + '\',\'detail\')">Zerar</button>');
 }
-function resetWordG(bid,wid){
-  const b=S.blocks.find(x=>x.id===bid);if(!b)return;
-  const w=(b.words||[]).find(x=>x.id===wid);if(!w)return;
+function resetWordG(bid, wid) {
+  const b = S.blocks.find(x => x.id === bid); if (!b) return;
+  const w = (b.words || []).find(x => x.id === wid); if (!w) return;
   openModal('Zerar progresso da palavra',
-    '<p style="color:var(--text2);font-size:0.9rem">Zerar todas as estrelas (Quiz e Digitação) de <strong style="color:var(--text)">"'+w.en+'"</strong>?</p>',
-    '<button class="btn bs" onclick="snd(\'click\');closeModal()">Cancelar</button><button class="btn b-reset" onclick="snd(\'click\');confirmResetWord(\''+bid+'\',\''+wid+'\',\'all\')">Zerar</button>');
+    '<p style="color:var(--text2);font-size:0.9rem">Zerar todas as estrelas (Quiz e Digitação) de <strong style="color:var(--text)">"' + w.en + '"</strong>?</p>',
+    '<button class="btn bs" onclick="snd(\'click\');closeModal()">Cancelar</button><button class="btn b-reset" onclick="snd(\'click\');confirmResetWord(\'' + bid + '\',\'' + wid + '\',\'all\')">Zerar</button>');
 }
-function confirmResetWord(bid,wid,context){
-  const b=S.blocks.find(x=>x.id===bid);if(!b)return;
-  const w=(b.words||[]).find(x=>x.id===wid);if(!w)return;
-  w.starsQ=0;w.starsT=0;save();closeModal();
-  if(context==='detail')renderDetail();else renderAll();
-  toast('↺ Progresso zerado.','success');
+function confirmResetWord(bid, wid, context) {
+  const b = S.blocks.find(x => x.id === bid); if (!b) return;
+  const w = (b.words || []).find(x => x.id === wid); if (!w) return;
+  w.starsQ = 0; w.starsT = 0; save(); closeModal();
+  if (context === 'detail') renderDetail(); else renderAll();
+  toast('↺ Progresso zerado.', 'success');
 }
-function confirmResetSub(){
-  const b=S.blocks.find(x=>x.id===S.curBlock);if(!b)return;
-  const subWords=(b.words||[]).filter(w=>w.sub===S.curSub);
-  if(!subWords.length){toast('Sub-bloco vazio.','error');return;}
-  openModal('Zerar progresso do Sub-bloco '+S.curSub,
-    '<p style="color:var(--text2);font-size:0.9rem">Zerar estrelas de <strong style="color:var(--text)">'+subWords.length+' palavra(s)</strong>?</p>',
+function confirmResetSub() {
+  const b = S.blocks.find(x => x.id === S.curBlock); if (!b) return;
+  const subWords = (b.words || []).filter(w => w.sub === S.curSub);
+  if (!subWords.length) { toast('Sub-bloco vazio.', 'error'); return; }
+  openModal('Zerar progresso do Sub-bloco ' + S.curSub,
+    '<p style="color:var(--text2);font-size:0.9rem">Zerar estrelas de <strong style="color:var(--text)">' + subWords.length + ' palavra(s)</strong>?</p>',
     '<button class="btn bs" onclick="snd(\'click\');closeModal()">Cancelar</button><button class="btn b-reset" onclick="snd(\'click\');doResetSub()">Zerar</button>');
 }
-function doResetSub(){
-  const b=S.blocks.find(x=>x.id===S.curBlock);if(!b)return;
-  let count=0;(b.words||[]).forEach(w=>{if(w.sub===S.curSub){w.starsQ=0;w.starsT=0;count++;}});
-  save();closeModal();renderDetail();toast('↺ '+count+' palavra(s) zerada(s).','success');
+function doResetSub() {
+  const b = S.blocks.find(x => x.id === S.curBlock); if (!b) return;
+  let count = 0; (b.words || []).forEach(w => { if (w.sub === S.curSub) { w.starsQ = 0; w.starsT = 0; count++; } });
+  save(); closeModal(); renderDetail(); toast('↺ ' + count + ' palavra(s) zerada(s).', 'success');
 }
-function confirmResetBlock(){
-  const b=S.blocks.find(x=>x.id===S.curBlock);if(!b)return;
-  const total=(b.words||[]).length;if(!total){toast('Bloco vazio.','error');return;}
+function confirmResetBlock() {
+  const b = S.blocks.find(x => x.id === S.curBlock); if (!b) return;
+  const total = (b.words || []).length; if (!total) { toast('Bloco vazio.', 'error'); return; }
   openModal('Zerar progresso do bloco',
-    '<p style="color:var(--text2);font-size:0.9rem">Zerar estrelas de <strong style="color:var(--text)">'+total+' palavra(s)</strong> do bloco?</p>',
+    '<p style="color:var(--text2);font-size:0.9rem">Zerar estrelas de <strong style="color:var(--text)">' + total + ' palavra(s)</strong> do bloco?</p>',
     '<button class="btn bs" onclick="snd(\'click\');closeModal()">Cancelar</button><button class="btn b-reset" onclick="snd(\'click\');doResetBlock()">Zerar</button>');
 }
-function doResetBlock(){
-  const b=S.blocks.find(x=>x.id===S.curBlock);if(!b)return;
-  (b.words||[]).forEach(w=>{w.starsQ=0;w.starsT=0;});
-  save();closeModal();renderDetail();toast('↺ Progresso zerado!','success');
+function doResetBlock() {
+  const b = S.blocks.find(x => x.id === S.curBlock); if (!b) return;
+  (b.words || []).forEach(w => { w.starsQ = 0; w.starsT = 0; });
+  save(); closeModal(); renderDetail(); toast('↺ Progresso zerado!', 'success');
 }
 
-/* ===== PROMPT GENERATOR ===== */
-function openPromptModal(scope){
-  const b=S.blocks.find(x=>x.id===S.curBlock);if(!b)return;
-  let words=b.words||[];
-  if(scope==='sub')words=words.filter(w=>w.sub===S.curSub);
-  if(!words.length){toast('Não há palavras para gerar prompt.','error');return;}
-  const scopeLabel=scope==='sub'?('Sub-bloco '+S.curSub):'Bloco completo';
-  promptType='narrative';
-  openModal('📝 Gerar prompt — '+scopeLabel,
-    '<div class="prompt-info"><strong>Como funciona:</strong> escolha o tipo de texto, copie o prompt gerado e cole em qualquer chatbot de IA (Claude, ChatGPT, Gemini, etc.). A IA vai criar um texto avançado em inglês com estas <strong>'+words.length+'</strong> palavra(s), com tradução parágrafo por parágrafo.</div>'
-    +'<div style="font-size:0.85rem;color:var(--text2);margin-bottom:0.5rem">1. Tipo de texto:</div>'
-    +'<div class="type-choice">'
-    +'<div class="type-choice-btn sel" id="pt-narrative" onclick="snd(\'click\');setPromptType(\'narrative\')">'
-    +'<div class="ic">📖</div><div class="nm">Narrativa</div><div class="ds">História curta com começo, meio e fim</div></div>'
-    +'<div class="type-choice-btn" id="pt-dialogue" onclick="snd(\'click\');setPromptType(\'dialogue\')">'
-    +'<div class="ic">💬</div><div class="nm">Diálogo</div><div class="ds">Conversa entre 2 ou mais personagens</div></div>'
-    +'</div>'
-    +'<div style="font-size:0.85rem;color:var(--text2);margin-bottom:0.5rem;margin-top:1rem">2. Prompt gerado (clique para copiar):</div>'
-    +'<textarea id="prompt-output" readonly></textarea>',
+function openPromptModal(scope) {
+  const b = S.blocks.find(x => x.id === S.curBlock); if (!b) return;
+  let words = b.words || [];
+  if (scope === 'sub') words = words.filter(w => w.sub === S.curSub);
+  if (!words.length) { toast('Não há palavras para gerar prompt.', 'error'); return; }
+  const scopeLabel = scope === 'sub' ? ('Sub-bloco ' + S.curSub) : 'Bloco completo';
+  promptType = 'narrative';
+  openModal('📝 Gerar prompt — ' + scopeLabel,
+    '<div class="prompt-info"><strong>Como funciona:</strong> escolha o tipo de texto, copie o prompt gerado e cole em qualquer chatbot de IA (Claude, ChatGPT, Gemini, etc.). A IA vai criar um texto avançado em inglês com estas <strong>' + words.length + '</strong> palavra(s), com tradução parágrafo por parágrafo.</div>'
+    + '<div style="font-size:0.85rem;color:var(--text2);margin-bottom:0.5rem">1. Tipo de texto:</div>'
+    + '<div class="type-choice">'
+    + '<div class="type-choice-btn sel" id="pt-narrative" onclick="snd(\'click\');setPromptType(\'narrative\')">'
+    + '<div class="ic">📖</div><div class="nm">Narrativa</div><div class="ds">História curta com começo, meio e fim</div></div>'
+    + '<div class="type-choice-btn" id="pt-dialogue" onclick="snd(\'click\');setPromptType(\'dialogue\')">'
+    + '<div class="ic">💬</div><div class="nm">Diálogo</div><div class="ds">Conversa entre 2 ou mais personagens</div></div>'
+    + '</div>'
+    + '<div style="font-size:0.85rem;color:var(--text2);margin-bottom:0.5rem;margin-top:1rem">2. Prompt gerado (clique para copiar):</div>'
+    + '<textarea id="prompt-output" readonly></textarea>',
     '<button class="btn bs" onclick="snd(\'click\');closeModal()">Fechar</button>'
-    +'<button class="btn bp" onclick="snd(\'click\');copyPrompt()">📋 Copiar prompt</button>');
-  window._promptWords=words;
-  window._promptScope=scope;
+    + '<button class="btn bp" onclick="snd(\'click\');copyPrompt()">📋 Copiar prompt</button>');
+  window._promptWords = words;
+  window._promptScope = scope;
   updatePromptText();
 }
 
-function setPromptType(t){
-  promptType=t;
-  document.getElementById('pt-narrative').classList.toggle('sel',t==='narrative');
-  document.getElementById('pt-dialogue').classList.toggle('sel',t==='dialogue');
+function setPromptType(t) {
+  promptType = t;
+  document.getElementById('pt-narrative').classList.toggle('sel', t === 'narrative');
+  document.getElementById('pt-dialogue').classList.toggle('sel', t === 'dialogue');
   updatePromptText();
 }
 
-function updatePromptText(){
-  const words=window._promptWords||[];
-  const wordList=words.map((w,i)=>(i+1)+'. '+w.en+' — '+w.pt).join('\n');
-  let template='';
-  if(promptType==='narrative'){
-    template='Por favor, gere uma NARRATIVA em INGLÊS com nível AVANÇADO, usando OBRIGATORIAMENTE todas as palavras/expressões abaixo de forma natural e contextualizada. A história deve ter começo, meio e fim claros, em torno de 4 a 6 parágrafos.\n\n'
-      +'REGRAS IMPORTANTES:\n'
-      +'- Use cada palavra em pelo menos uma vez (pode usar mais).\n'
-      +'- Destaque as palavras-alvo com **negrito** quando aparecerem no texto.\n'
-      +'- Após cada parágrafo em inglês, forneça a tradução completa para o português brasileiro entre parênteses, no parágrafo seguinte.\n'
-      +'- Use vocabulário e estruturas gramaticais avançadas.\n'
-      +'- A narrativa deve ser coerente, envolvente e fazer sentido como história real.\n\n'
-      +'PALAVRAS A USAR:\n'+wordList+'\n\n'
-      +'FORMATO DE SAÍDA:\n[Parágrafo 1 em inglês com palavras em **negrito**]\n[Tradução do parágrafo 1 em português]\n\n[Parágrafo 2 em inglês com palavras em **negrito**]\n[Tradução do parágrafo 2 em português]\n\n... e assim por diante.';
+function updatePromptText() {
+  const words = window._promptWords || [];
+  const wordList = words.map((w, i) => (i + 1) + '. ' + w.en + ' — ' + w.pt).join('\n');
+  let template = '';
+  if (promptType === 'narrative') {
+    template = 'Por favor, gere uma NARRATIVA em INGLÊS com nível AVANÇADO, usando OBRIGATORIAMENTE todas as palavras/expressões abaixo de forma natural e contextualizada. A história deve ter começo, meio e fim claros, em torno de 4 a 6 parágrafos.\n\n'
+      + 'REGRAS IMPORTANTES:\n'
+      + '- Use cada palavra em pelo menos uma vez (pode usar mais).\n'
+      + '- Destaque as palavras-alvo com **negrito** quando aparecerem no texto.\n'
+      + '- Após cada parágrafo em inglês, forneça a tradução completa para o português brasileiro entre parênteses, no parágrafo seguinte.\n'
+      + '- Use vocabulário e estruturas gramaticais avançadas.\n'
+      + '- A narrativa deve ser coerente, envolvente e fazer sentido como história real.\n\n'
+      + 'PALAVRAS A USAR:\n' + wordList + '\n\n'
+      + 'FORMATO DE SAÍDA:\n[Parágrafo 1 em inglês com palavras em **negrito**]\n[Tradução do parágrafo 1 em português]\n\n[Parágrafo 2 em inglês com palavras em **negrito**]\n[Tradução do parágrafo 2 em português]\n\n... e assim por diante.';
   } else {
-    template='Por favor, gere um DIÁLOGO em INGLÊS com nível AVANÇADO entre 2 ou 3 personagens, usando OBRIGATORIAMENTE todas as palavras/expressões abaixo de forma natural e contextualizada. O diálogo deve ter contexto/cena, conflito ou tópico claro, e desfecho.\n\n'
-      +'REGRAS IMPORTANTES:\n'
-      +'- Use cada palavra pelo menos uma vez (pode usar mais).\n'
-      +'- Destaque as palavras-alvo com **negrito** quando aparecerem nas falas.\n'
-      +'- Comece com uma breve descrição da cena em inglês (1-2 linhas) com tradução logo abaixo.\n'
-      +'- Após cada bloco de 2-4 falas em inglês, forneça a tradução para o português brasileiro logo abaixo.\n'
-      +'- Use vocabulário e estruturas gramaticais avançadas, incluindo expressões idiomáticas, gírias apropriadas, contractions e linguagem natural.\n'
-      +'- O diálogo deve ser coerente e parecer uma conversa real entre pessoas.\n\n'
-      +'PALAVRAS A USAR:\n'+wordList+'\n\n'
-      +'FORMATO DE SAÍDA:\n[Cena em inglês]\n[Tradução da cena]\n\n[Personagem 1]: [fala 1 em inglês com palavras em **negrito**]\n[Personagem 2]: [fala 2 em inglês com palavras em **negrito**]\n[Tradução das falas acima]\n\n... e assim por diante até o final.';
+    template = 'Por favor, gere um DIÁLOGO em INGLÊS com nível AVANÇADO entre 2 ou 3 personagens, usando OBRIGATORIAMENTE todas as palavras/expressões abaixo de forma natural e contextualizada. O diálogo deve ter contexto/cena, conflito ou tópico claro, e desfecho.\n\n'
+      + 'REGRAS IMPORTANTES:\n'
+      + '- Use cada palavra pelo menos uma vez (pode usar mais).\n'
+      + '- Destaque as palavras-alvo com **negrito** quando aparecerem nas falas.\n'
+      + '- Comece com uma breve descrição da cena em inglês (1-2 linhas) com tradução logo abaixo.\n'
+      + '- Após cada bloco de 2-4 falas em inglês, forneça a tradução para o português brasileiro logo abaixo.\n'
+      + '- Use vocabulário e estruturas gramaticais avançadas, incluindo expressões idiomáticas, gírias apropriadas, contractions e linguagem natural.\n'
+      + '- O diálogo deve ser coerente e parecer uma conversa real entre pessoas.\n\n'
+      + 'PALAVRAS A USAR:\n' + wordList + '\n\n'
+      + 'FORMATO DE SAÍDA:\n[Cena em inglês]\n[Tradução da cena]\n\n[Personagem 1]: [fala 1 em inglês com palavras em **negrito**]\n[Personagem 2]: [fala 2 em inglês com palavras em **negrito**]\n[Tradução das falas acima]\n\n... e assim por diante até o final.';
   }
-  const out=document.getElementById('prompt-output');
-  if(out)out.value=template;
+  const out = document.getElementById('prompt-output');
+  if (out) out.value = template;
 }
 
-function copyPrompt(){
-  const out=document.getElementById('prompt-output');if(!out)return;
-  out.select();out.setSelectionRange(0,99999);
-  try{
-    navigator.clipboard.writeText(out.value).then(()=>{
-      toast('✓ Prompt copiado para a área de transferência!','success');
+function copyPrompt() {
+  const out = document.getElementById('prompt-output'); if (!out) return;
+  out.select(); out.setSelectionRange(0, 99999);
+  try {
+    navigator.clipboard.writeText(out.value).then(() => {
+      toast('✓ Prompt copiado para a área de transferência!', 'success');
       snd('master');
-    }).catch(()=>{
+    }).catch(() => {
       document.execCommand('copy');
-      toast('✓ Prompt copiado!','success');snd('master');
+      toast('✓ Prompt copiado!', 'success'); snd('master');
     });
-  }catch(e){
+  } catch (e) {
     document.execCommand('copy');
-    toast('✓ Prompt copiado!','success');snd('master');
+    toast('✓ Prompt copiado!', 'success'); snd('master');
   }
 }
-/* ===== END PROMPT GENERATOR ===== */
 
-function delBlock(id){
-  openModal('Apagar bloco','<p style="color:var(--text2);font-size:0.9rem">Tem certeza? Tudo será apagado.</p>',
-    '<button class="btn bs" onclick="snd(\'click\');closeModal()">Cancelar</button><button class="btn bd" onclick="snd(\'click\');confDelBlock(\''+id+'\')">Apagar</button>');
+function delBlock(id) {
+  openModal('Apagar bloco', '<p style="color:var(--text2);font-size:0.9rem">Tem certeza? Tudo será apagado.</p>',
+    '<button class="btn bs" onclick="snd(\'click\');closeModal()">Cancelar</button><button class="btn bd" onclick="snd(\'click\');confDelBlock(\'' + id + '\')">Apagar</button>');
 }
-function confDelBlock(id){S.blocks=S.blocks.filter(b=>b.id!==id);save();closeModal();renderBlocks();}
-function delCurBlock(){const id=S.curBlock;go('blocks');delBlock(id);}
-function openNewBlock(){
-  openModal('Criar novo bloco','<input type="text" id="m-bname" placeholder="Nome do bloco" style="width:100%">',
+function confDelBlock(id) { S.blocks = S.blocks.filter(b => b.id !== id); save(); closeModal(); renderBlocks(); }
+function delCurBlock() { const id = S.curBlock; go('blocks'); delBlock(id); }
+function openNewBlock() {
+  openModal('Criar novo bloco', '<input type="text" id="m-bname" placeholder="Nome do bloco" style="width:100%">',
     '<button class="btn bs" onclick="snd(\'click\');closeModal()">Cancelar</button><button class="btn bp" onclick="snd(\'click\');confNewBlock()">Criar</button>');
-  setTimeout(()=>document.getElementById('m-bname')?.focus(),100);
+  setTimeout(() => document.getElementById('m-bname')?.focus(), 100);
 }
-function confNewBlock(){
-  const n=document.getElementById('m-bname').value.trim();if(!n){toast('Digite um nome.','error');return;}
-  S.blocks.push({id:uid(),name:n,words:[]});save();closeModal();renderBlocks();toast('"'+n+'" criado!','success');snd('add');
+function confNewBlock() {
+  const n = document.getElementById('m-bname').value.trim(); if (!n) { toast('Digite um nome.', 'error'); return; }
+  S.blocks.push({ id: uid(), name: n, words: [] }); save(); closeModal(); renderBlocks(); toast('"' + n + '" criado!', 'success'); snd('add');
 }
-function openRename(){
-  const b=S.blocks.find(x=>x.id===S.curBlock);
-  openModal('Renomear bloco','<input type="text" id="m-rname" value="'+b.name+'" style="width:100%">',
+function openRename() {
+  const b = S.blocks.find(x => x.id === S.curBlock);
+  openModal('Renomear bloco', '<input type="text" id="m-rname" value="' + b.name + '" style="width:100%">',
     '<button class="btn bs" onclick="snd(\'click\');closeModal()">Cancelar</button><button class="btn bp" onclick="snd(\'click\');confRename()">Salvar</button>');
-  setTimeout(()=>{const i=document.getElementById('m-rname');if(i){i.focus();i.select();}},100);
+  setTimeout(() => { const i = document.getElementById('m-rname'); if (i) { i.focus(); i.select(); } }, 100);
 }
-function confRename(){const n=document.getElementById('m-rname').value.trim();if(!n)return;S.blocks.find(x=>x.id===S.curBlock).name=n;save();closeModal();renderDetail();toast('Renomeado!','success');}
+function confRename() { const n = document.getElementById('m-rname').value.trim(); if (!n) return; S.blocks.find(x => x.id === S.curBlock).name = n; save(); closeModal(); renderDetail(); toast('Renomeado!', 'success'); }
 
-function renderQuizHome(){
-  const list=document.getElementById('quiz-block-list');
-  if(!S.blocks.length){list.innerHTML='<div class="empty"><p>Crie blocos primeiro!</p></div>';return;}
-  list.innerHTML=S.blocks.map(b=>{
-    const t=(b.words||[]).length,dq=domPct(b.words,'quiz'),dt=domPct(b.words,'type');
-    return '<div class="setup-option'+(Q.block===b.id?' sel':'')+'" onclick="snd(\'click\');selectQuizBlock(\''+b.id+'\',this)">'
-      +'<h4>'+b.name+'</h4><p>'+t+' palavras &nbsp;·&nbsp; 🔤 '+dq+'% &nbsp; ⌨️ '+dt+'%</p></div>';
+function renderQuizHome() {
+  const list = document.getElementById('quiz-block-list');
+  if (!S.blocks.length) { list.innerHTML = '<div class="empty"><p>Crie blocos primeiro!</p></div>'; return; }
+  list.innerHTML = S.blocks.map(b => {
+    const t = (b.words || []).length, dq = domPct(b.words, 'quiz'), dt = domPct(b.words, 'type');
+    return '<div class="setup-option' + (Q.block === b.id ? ' sel' : '') + '" onclick="snd(\'click\');selectQuizBlock(\'' + b.id + '\',this)">'
+      + '<h4>' + b.name + '</h4><p>' + t + ' palavras &nbsp;·&nbsp; 🔤 ' + dq + '% &nbsp; ⌨️ ' + dt + '%</p></div>';
   }).join('');
-  document.getElementById('quiz-extra').style.display=Q.block?'block':'none';
-  document.getElementById('sub-selector').style.display=Q.scope==='sub'?'grid':'none';
+  document.getElementById('quiz-extra').style.display = Q.block ? 'block' : 'none';
+  document.getElementById('sub-selector').style.display = Q.scope === 'sub' ? 'grid' : 'none';
 }
-function selectQuizBlock(id,el){Q.block=id;document.querySelectorAll('#quiz-block-list .setup-option').forEach(e=>e.classList.remove('sel'));el.classList.add('sel');document.getElementById('quiz-extra').style.display='block';}
-function setScope(s){Q.scope=s;document.getElementById('scope-full').classList.toggle('sel',s==='full');document.getElementById('scope-sub').classList.toggle('sel',s==='sub');document.getElementById('sub-selector').style.display=s==='sub'?'grid':'none';}
-function setSubQuiz(n,el){Q.subNum=n;document.querySelectorAll('.sub-opt').forEach(e=>e.classList.remove('sel'));el.classList.add('sel');}
-function setDir(d){Q.dir=d;document.getElementById('dir-en').classList.toggle('sel',d==='en');document.getElementById('dir-pt').classList.toggle('sel',d==='pt');}
-function setMode(m){Q.mode=m;document.getElementById('mode-quiz').classList.toggle('sel',m==='quiz');document.getElementById('mode-type').classList.toggle('sel',m==='type');}
+function selectQuizBlock(id, el) { Q.block = id; document.querySelectorAll('#quiz-block-list .setup-option').forEach(e => e.classList.remove('sel')); el.classList.add('sel'); document.getElementById('quiz-extra').style.display = 'block'; }
+function setScope(s) { Q.scope = s; document.getElementById('scope-full').classList.toggle('sel', s === 'full'); document.getElementById('scope-sub').classList.toggle('sel', s === 'sub'); document.getElementById('sub-selector').style.display = s === 'sub' ? 'grid' : 'none'; }
+function setSubQuiz(n, el) { Q.subNum = n; document.querySelectorAll('.sub-opt').forEach(e => e.classList.remove('sel')); el.classList.add('sel'); }
+function setDir(d) { Q.dir = d; document.getElementById('dir-en').classList.toggle('sel', d === 'en'); document.getElementById('dir-pt').classList.toggle('sel', d === 'pt'); }
+function setMode(m) { Q.mode = m; document.getElementById('mode-quiz').classList.toggle('sel', m === 'quiz'); document.getElementById('mode-type').classList.toggle('sel', m === 'type'); }
 
-function startPractice(){
-  const b=S.blocks.find(x=>x.id===Q.block);
-  if(!b){toast('Selecione um bloco.','error');return;}
-  let pool=b.words||[];
-  if(Q.scope==='sub')pool=pool.filter(w=>w.sub===Q.subNum);
-  if(Q.mode==='quiz'&&pool.length<4){toast('Precisa de 4+ palavras para o Quiz.','error');return;}
-  if(!pool.length){toast('Nenhuma palavra encontrada.','error');return;}
-  const key=Q.mode==='quiz'?'starsQ':'starsT';
-  Q.words=[...pool].sort((a,b)=>(a[key]||0)-(b[key]||0));
-  Q.idx=0;Q.correct=0;Q.wrong=0;Q.answered=false;Q.newQ=0;Q.newT=0;
-  if(Q.mode==='quiz'){go('quiz');showQuestion();}else{go('type');showTypeQuestion();}
+function startPractice() {
+  const b = S.blocks.find(x => x.id === Q.block);
+  if (!b) { toast('Selecione um bloco.', 'error'); return; }
+  let pool = b.words || [];
+  if (Q.scope === 'sub') pool = pool.filter(w => w.sub === Q.subNum);
+  if (Q.mode === 'quiz' && pool.length < 4) { toast('Precisa de 4+ palavras para o Quiz.', 'error'); return; }
+  if (!pool.length) { toast('Nenhuma palavra encontrada.', 'error'); return; }
+  const key = Q.mode === 'quiz' ? 'starsQ' : 'starsT';
+  Q.words = [...pool].sort((a, b) => (a[key] || 0) - (b[key] || 0));
+  Q.idx = 0; Q.correct = 0; Q.wrong = 0; Q.answered = false; Q.newQ = 0; Q.newT = 0;
+  if (Q.mode === 'quiz') { go('quiz'); showQuestion(); } else { go('type'); showTypeQuestion(); }
 }
 
-function applyResult(wid,isCorrect){
-  const b=S.blocks.find(x=>x.id===Q.block);if(!b)return;
-  const w=(b.words||[]).find(x=>x.id===wid);if(!w)return;
-  const key=Q.mode==='quiz'?'starsQ':'starsT';const prev=w[key]||0;
-  if(isCorrect){if(prev<MAX){w[key]=prev+1;if(w[key]===MAX){if(Q.mode==='quiz')Q.newQ++;else Q.newT++;snd('master');}}}
-  else {if(prev>0)w[key]=0;}
+function applyResult(wid, isCorrect) {
+  const b = S.blocks.find(x => x.id === Q.block); if (!b) return;
+  const w = (b.words || []).find(x => x.id === wid); if (!w) return;
+  const key = Q.mode === 'quiz' ? 'starsQ' : 'starsT'; const prev = w[key] || 0;
+  if (isCorrect) { if (prev < MAX) { w[key] = prev + 1; if (w[key] === MAX) { if (Q.mode === 'quiz') Q.newQ++; else Q.newT++; snd('master'); } } }
+  else { if (prev > 0) w[key] = 0; }
   save();
 }
-function updateDomDisplay(wid,pfx){
-  const b=S.blocks.find(x=>x.id===Q.block);const w=(b?.words||[]).find(x=>x.id===wid);if(!w)return;
-  document.getElementById(pfx+'-stars-q').textContent=stars(w.starsQ||0);
-  document.getElementById(pfx+'-stars-t').textContent=stars(w.starsT||0);
+function updateDomDisplay(wid, pfx) {
+  const b = S.blocks.find(x => x.id === Q.block); const w = (b?.words || []).find(x => x.id === wid); if (!w) return;
+  document.getElementById(pfx + '-stars-q').textContent = stars(w.starsQ || 0);
+  document.getElementById(pfx + '-stars-t').textContent = stars(w.starsT || 0);
 }
-function showQuestion(){
-  const w=Q.words[Q.idx],total=Q.words.length;
-  document.getElementById('q-prog').style.width=Math.round((Q.idx/total)*100)+'%';
-  document.getElementById('q-counter').textContent=(Q.idx+1)+'/'+total;
-  document.getElementById('q-correct').textContent=Q.correct+' corretas';
-  document.getElementById('q-wrong').textContent=Q.wrong+' erradas';
-  const isEN=Q.dir==='en';
-  document.getElementById('q-label').textContent=isEN?'Qual o significado em português?':'Qual a palavra em inglês?';
-  document.getElementById('q-word').textContent=isEN?w.en:w.pt;
-  document.getElementById('q-stars-q').textContent=stars(w.starsQ||0);
-  document.getElementById('q-stars-t').textContent=stars(w.starsT||0);
-  document.getElementById('q-meaning').textContent=isEN?w.pt:w.en;
+function showQuestion() {
+  const w = Q.words[Q.idx], total = Q.words.length;
+  document.getElementById('q-prog').style.width = Math.round((Q.idx / total) * 100) + '%';
+  document.getElementById('q-counter').textContent = (Q.idx + 1) + '/' + total;
+  document.getElementById('q-correct').textContent = Q.correct + ' corretas';
+  document.getElementById('q-wrong').textContent = Q.wrong + ' erradas';
+  const isEN = Q.dir === 'en';
+  document.getElementById('q-label').textContent = isEN ? 'Qual o significado em português?' : 'Qual a palavra em inglês?';
+  document.getElementById('q-word').textContent = isEN ? w.en : w.pt;
+  document.getElementById('q-stars-q').textContent = stars(w.starsQ || 0);
+  document.getElementById('q-stars-t').textContent = stars(w.starsT || 0);
+  document.getElementById('q-meaning').textContent = isEN ? w.pt : w.en;
   document.getElementById('q-meaning').classList.remove('show');
-  document.getElementById('q-card').classList.remove('flash-correct','flash-wrong');
-  const allWords=S.blocks.find(x=>x.id===Q.block)?.words||[];
-  const others=shuffle(allWords.filter(x=>x.id!==w.id)).slice(0,3);
-  document.getElementById('q-options').innerHTML=shuffle([w,...others]).map(o=>{
-    const label=isEN?o.pt:o.en;
-    return '<button class="qopt" onclick="snd(\'click\');answer(\''+o.id+'\',\''+w.id+'\',this)">'+label+'</button>';
+  document.getElementById('q-card').classList.remove('flash-correct', 'flash-wrong');
+  const allWords = S.blocks.find(x => x.id === Q.block)?.words || [];
+  const others = shuffle(allWords.filter(x => x.id !== w.id)).slice(0, 3);
+  document.getElementById('q-options').innerHTML = shuffle([w, ...others]).map(o => {
+    const label = isEN ? o.pt : o.en;
+    return '<button class="qopt" onclick="snd(\'click\');answer(\'' + o.id + '\',\'' + w.id + '\',this)">' + label + '</button>';
   }).join('');
-  document.getElementById('q-show-btn').style.display='inline-block';
-  document.getElementById('q-next-btn').style.display='none';
-  Q.answered=false;
+  document.getElementById('q-show-btn').style.display = 'inline-block';
+  document.getElementById('q-next-btn').style.display = 'none';
+  Q.answered = false;
 }
-function answer(chosen,correct,el){
-  if(Q.answered)return;Q.answered=true;
-  const isCorrect=chosen===correct;
-  document.querySelectorAll('.qopt').forEach(b=>{
-    b.disabled=true;
-    const wid=Q.dir==='en'?(S.blocks.find(x=>x.id===Q.block)?.words||[]).find(w=>w.pt===b.textContent)?.id:(S.blocks.find(x=>x.id===Q.block)?.words||[]).find(w=>w.en===b.textContent)?.id;
-    if(wid===correct)b.classList.add('correct');
-    else if(b===el&&!isCorrect)b.classList.add('wrong');
+function answer(chosen, correct, el) {
+  if (Q.answered) return; Q.answered = true;
+  const isCorrect = chosen === correct;
+  document.querySelectorAll('.qopt').forEach(b => {
+    b.disabled = true;
+    const wid = Q.dir === 'en' ? (S.blocks.find(x => x.id === Q.block)?.words || []).find(w => w.pt === b.textContent)?.id : (S.blocks.find(x => x.id === Q.block)?.words || []).find(w => w.en === b.textContent)?.id;
+    if (wid === correct) b.classList.add('correct');
+    else if (b === el && !isCorrect) b.classList.add('wrong');
   });
-  applyResult(correct,isCorrect);updateDomDisplay(correct,'q');
-  if(isCorrect){Q.correct++;snd('correct');document.getElementById('q-card').classList.add('flash-correct');}
-  else{Q.wrong++;snd('wrong');document.getElementById('q-card').classList.add('flash-wrong');document.getElementById('q-meaning').classList.add('show');}
-  document.getElementById('q-show-btn').style.display='none';
-  document.getElementById('q-next-btn').style.display='inline-block';
+  applyResult(correct, isCorrect); updateDomDisplay(correct, 'q');
+  if (isCorrect) { Q.correct++; snd('correct'); document.getElementById('q-card').classList.add('flash-correct'); }
+  else { Q.wrong++; snd('wrong'); document.getElementById('q-card').classList.add('flash-wrong'); document.getElementById('q-meaning').classList.add('show'); }
+  document.getElementById('q-show-btn').style.display = 'none';
+  document.getElementById('q-next-btn').style.display = 'inline-block';
 }
-function showMeaning(){document.getElementById('q-meaning').classList.add('show');}
-function nextQuestion(){Q.idx++;if(Q.idx>=Q.words.length){showResult();return;}showQuestion();}
+function showMeaning() { document.getElementById('q-meaning').classList.add('show'); }
+function nextQuestion() { Q.idx++; if (Q.idx >= Q.words.length) { showResult(); return; } showQuestion(); }
 
-const normalize=s=>s.trim().toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,'');
-function showTypeQuestion(){
-  const w=Q.words[Q.idx],total=Q.words.length;
-  document.getElementById('t-prog').style.width=Math.round((Q.idx/total)*100)+'%';
-  document.getElementById('t-counter').textContent=(Q.idx+1)+'/'+total;
-  document.getElementById('t-correct').textContent=Q.correct+' corretas';
-  document.getElementById('t-wrong').textContent=Q.wrong+' erradas';
-  const isEN=Q.dir==='en';
-  document.getElementById('t-label').textContent=isEN?'Digite o significado em português:':'Digite a palavra em inglês:';
-  document.getElementById('t-word').textContent=isEN?w.en:w.pt;
-  document.getElementById('t-stars-q').textContent=stars(w.starsQ||0);
-  document.getElementById('t-stars-t').textContent=stars(w.starsT||0);
-  const inp=document.getElementById('t-input');inp.value='';inp.className='type-input';inp.disabled=false;
-  document.getElementById('t-correct-ans').className='correct-answer';
-  document.getElementById('t-skip-btn').style.display='inline-block';
-  document.getElementById('t-check-btn').style.display='inline-block';
-  document.getElementById('t-next-btn').style.display='none';
-  document.getElementById('t-card').classList.remove('flash-correct','flash-wrong');
-  Q.answered=false;setTimeout(()=>inp.focus(),100);
+const normalize = s => s.trim().toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, '');
+function showTypeQuestion() {
+  const w = Q.words[Q.idx], total = Q.words.length;
+  document.getElementById('t-prog').style.width = Math.round((Q.idx / total) * 100) + '%';
+  document.getElementById('t-counter').textContent = (Q.idx + 1) + '/' + total;
+  document.getElementById('t-correct').textContent = Q.correct + ' corretas';
+  document.getElementById('t-wrong').textContent = Q.wrong + ' erradas';
+  const isEN = Q.dir === 'en';
+  document.getElementById('t-label').textContent = isEN ? 'Digite o significado em português:' : 'Digite a palavra em inglês:';
+  document.getElementById('t-word').textContent = isEN ? w.en : w.pt;
+  document.getElementById('t-stars-q').textContent = stars(w.starsQ || 0);
+  document.getElementById('t-stars-t').textContent = stars(w.starsT || 0);
+  const inp = document.getElementById('t-input'); inp.value = ''; inp.className = 'type-input'; inp.disabled = false;
+  document.getElementById('t-correct-ans').className = 'correct-answer';
+  document.getElementById('t-skip-btn').style.display = 'inline-block';
+  document.getElementById('t-check-btn').style.display = 'inline-block';
+  document.getElementById('t-next-btn').style.display = 'none';
+  document.getElementById('t-card').classList.remove('flash-correct', 'flash-wrong');
+  Q.answered = false; setTimeout(() => inp.focus(), 100);
 }
-function checkType(){
-  if(Q.answered)return;
-  const w=Q.words[Q.idx];const correct=Q.dir==='en'?w.pt:w.en;
-  const inp=document.getElementById('t-input');const typed=inp.value.trim();if(!typed)return;
-  Q.answered=true;
-  const isCorrect=normalize(typed)===normalize(correct);
-  inp.disabled=true;applyResult(w.id,isCorrect);updateDomDisplay(w.id,'t');
-  if(isCorrect){Q.correct++;snd('correct');inp.className='type-input correct';document.getElementById('t-card').classList.add('flash-correct');}
-  else{Q.wrong++;snd('wrong');inp.className='type-input wrong';document.getElementById('t-card').classList.add('flash-wrong');const ans=document.getElementById('t-correct-ans');ans.textContent='✓ Resposta correta: '+correct;ans.className='correct-answer show';}
-  document.getElementById('t-skip-btn').style.display='none';document.getElementById('t-check-btn').style.display='none';document.getElementById('t-next-btn').style.display='inline-block';
+function checkType() {
+  if (Q.answered) return;
+  const w = Q.words[Q.idx]; const correct = Q.dir === 'en' ? w.pt : w.en;
+  const inp = document.getElementById('t-input'); const typed = inp.value.trim(); if (!typed) return;
+  Q.answered = true;
+  const isCorrect = normalize(typed) === normalize(correct);
+  inp.disabled = true; applyResult(w.id, isCorrect); updateDomDisplay(w.id, 't');
+  if (isCorrect) { Q.correct++; snd('correct'); inp.className = 'type-input correct'; document.getElementById('t-card').classList.add('flash-correct'); }
+  else { Q.wrong++; snd('wrong'); inp.className = 'type-input wrong'; document.getElementById('t-card').classList.add('flash-wrong'); const ans = document.getElementById('t-correct-ans'); ans.textContent = '✓ Resposta correta: ' + correct; ans.className = 'correct-answer show'; }
+  document.getElementById('t-skip-btn').style.display = 'none'; document.getElementById('t-check-btn').style.display = 'none'; document.getElementById('t-next-btn').style.display = 'inline-block';
 }
-function skipType(){
-  if(Q.answered)return;Q.answered=true;Q.wrong++;
-  const w=Q.words[Q.idx];const correct=Q.dir==='en'?w.pt:w.en;
-  applyResult(w.id,false);
-  const inp=document.getElementById('t-input');inp.disabled=true;inp.className='type-input wrong';
-  const ans=document.getElementById('t-correct-ans');ans.textContent='✓ Resposta: '+correct;ans.className='correct-answer show';
+function skipType() {
+  if (Q.answered) return; Q.answered = true; Q.wrong++;
+  const w = Q.words[Q.idx]; const correct = Q.dir === 'en' ? w.pt : w.en;
+  applyResult(w.id, false);
+  const inp = document.getElementById('t-input'); inp.disabled = true; inp.className = 'type-input wrong';
+  const ans = document.getElementById('t-correct-ans'); ans.textContent = '✓ Resposta: ' + correct; ans.className = 'correct-answer show';
   document.getElementById('t-card').classList.add('flash-wrong');
-  document.getElementById('t-skip-btn').style.display='none';document.getElementById('t-check-btn').style.display='none';document.getElementById('t-next-btn').style.display='inline-block';
+  document.getElementById('t-skip-btn').style.display = 'none'; document.getElementById('t-check-btn').style.display = 'none'; document.getElementById('t-next-btn').style.display = 'inline-block';
   snd('wrong');
 }
-function nextType(){Q.idx++;if(Q.idx>=Q.words.length){showResult();return;}showTypeQuestion();}
+function nextType() { Q.idx++; if (Q.idx >= Q.words.length) { showResult(); return; } showTypeQuestion(); }
 
-function showResult(){
+function showResult() {
   go('quiz-result');
-  const pct=Math.round((Q.correct/Q.words.length)*100);
-  document.getElementById('res-emoji').textContent=pct>=90?'🏆':pct>=70?'🎉':pct>=50?'😊':'💪';
-  document.getElementById('res-mode-label').textContent=Q.mode==='quiz'?'🔤 Modo Quiz':'⌨️ Modo Digitação';
-  document.getElementById('res-score').textContent=Q.correct+'/'+Q.words.length+' corretas ('+pct+'%)';
-  document.getElementById('res-msg').textContent=pct>=90?'Excelente!':pct>=70?'Muito bom!':pct>=50?'Bom progresso!':'Continue praticando!';
-  const domEl=document.getElementById('res-dom-update');
-  const lines=[];
-  if(Q.newQ>0)lines.push('🔤 '+Q.newQ+' palavra(s) dominada(s) no Quiz!');
-  if(Q.newT>0)lines.push('⌨️ '+Q.newT+' palavra(s) dominada(s) na Digitação!');
-  if(lines.length){domEl.innerHTML=lines.join('<br>');domEl.style.display='block';}else domEl.style.display='none';
-  const b=S.blocks.find(x=>x.id===Q.block);
-  if(b&&domPct(b.words,'quiz')===100&&domPct(b.words,'type')===100){snd('master');toast('🏆 Bloco 100% dominado!','gold');}
-  else snd(pct>=70?'correct':'wrong');
+  const pct = Math.round((Q.correct / Q.words.length) * 100);
+  document.getElementById('res-emoji').textContent = pct >= 90 ? '🏆' : pct >= 70 ? '🎉' : pct >= 50 ? '😊' : '💪';
+  document.getElementById('res-mode-label').textContent = Q.mode === 'quiz' ? '🔤 Modo Quiz' : '⌨️ Modo Digitação';
+  document.getElementById('res-score').textContent = Q.correct + '/' + Q.words.length + ' corretas (' + pct + '%)';
+  document.getElementById('res-msg').textContent = pct >= 90 ? 'Excelente!' : pct >= 70 ? 'Muito bom!' : pct >= 50 ? 'Bom progresso!' : 'Continue praticando!';
+  const domEl = document.getElementById('res-dom-update');
+  const lines = [];
+  if (Q.newQ > 0) lines.push('🔤 ' + Q.newQ + ' palavra(s) dominada(s) no Quiz!');
+  if (Q.newT > 0) lines.push('⌨️ ' + Q.newT + ' palavra(s) dominada(s) na Digitação!');
+  if (lines.length) { domEl.innerHTML = lines.join('<br>'); domEl.style.display = 'block'; } else domEl.style.display = 'none';
+  const b = S.blocks.find(x => x.id === Q.block);
+  if (b && domPct(b.words, 'quiz') === 100 && domPct(b.words, 'type') === 100) { snd('master'); toast('🏆 Bloco 100% dominado!', 'gold'); }
+  else snd(pct >= 70 ? 'correct' : 'wrong');
 }
 
-function updateBackupStatus(){
-  const el=document.getElementById('backup-status');if(!el)return;
-  let totalWords=0,totalDom=0;
-  S.blocks.forEach(b=>(b.words||[]).forEach(w=>{totalWords++;totalDom+=(w.starsQ||0)+(w.starsT||0);}));
-  el.innerHTML='📦 '+S.blocks.length+' bloco(s), '+totalWords+' palavra(s), '+totalDom+' estrela(s).';
+function updateBackupStatus() {
+  const el = document.getElementById('backup-status'); if (!el) return;
+  let totalWords = 0, totalDom = 0;
+  S.blocks.forEach(b => (b.words || []).forEach(w => { totalWords++; totalDom += (w.starsQ || 0) + (w.starsT || 0); }));
+  el.innerHTML = '📦 ' + S.blocks.length + ' bloco(s), ' + totalWords + ' palavra(s), ' + totalDom + ' estrela(s).';
 }
-function exportBackup(){
-  try{
-    const data={version:1,exportedAt:new Date().toISOString(),blocks:S.blocks};
-    const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
-    const url=URL.createObjectURL(blob);const a=document.createElement('a');
-    const date=new Date().toISOString().split('T')[0];
-    a.href=url;a.download='treinador-ingles-backup-'+date+'.json';
-    document.body.appendChild(a);a.click();document.body.removeChild(a);
-    setTimeout(()=>URL.revokeObjectURL(url),100);
-    toast('✓ Backup baixado!','success');snd('master');
-  }catch(e){toast('Erro.','error');}
+function exportBackup() {
+  try {
+    const data = { version: 1, exportedAt: new Date().toISOString(), blocks: S.blocks };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob); const a = document.createElement('a');
+    const date = new Date().toISOString().split('T')[0];
+    a.href = url; a.download = 'treinador-ingles-backup-' + date + '.json';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 100);
+    toast('✓ Backup baixado!', 'success'); snd('master');
+  } catch (e) { toast('Erro.', 'error'); }
 }
-function onFileSelected(event){
-  const file=event.target.files[0];if(!file)return;
-  const reader=new FileReader();
-  reader.onload=e=>{
-    try{
-      const data=JSON.parse(e.target.result);
-      if(!data.blocks||!Array.isArray(data.blocks)){toast('Arquivo inválido.','error');return;}
-      let totalWords=0;data.blocks.forEach(b=>{totalWords+=(b.words||[]).length;});
+function onFileSelected(event) {
+  const file = event.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (!data.blocks || !Array.isArray(data.blocks)) { toast('Arquivo inválido.', 'error'); return; }
+      let totalWords = 0; data.blocks.forEach(b => { totalWords += (b.words || []).length; });
       openModal('Confirmar importação',
-        '<p style="color:var(--text2);font-size:0.9rem">Encontrado: <strong style="color:var(--text)">'+data.blocks.length+'</strong> bloco(s), <strong style="color:var(--text)">'+totalWords+'</strong> palavra(s).</p><p style="color:var(--warning);font-size:0.85rem;margin-top:0.5rem">⚠ Dados atuais serão substituídos.</p>',
+        '<p style="color:var(--text2);font-size:0.9rem">Encontrado: <strong style="color:var(--text)">' + data.blocks.length + '</strong> bloco(s), <strong style="color:var(--text)">' + totalWords + '</strong> palavra(s).</p><p style="color:var(--warning);font-size:0.85rem;margin-top:0.5rem">⚠ Dados atuais serão substituídos.</p>',
         '<button class="btn bs" onclick="snd(\'click\');closeModal();document.getElementById(\'import-file\').value=\'\'">Cancelar</button><button class="btn bp" onclick="snd(\'click\');confirmImport()">Importar</button>');
-      window._pendingImport=data;
-    }catch(err){toast('Arquivo inválido.','error');}
-    event.target.value='';
+      window._pendingImport = data;
+    } catch (err) { toast('Arquivo inválido.', 'error'); }
+    event.target.value = '';
   };
   reader.readAsText(file);
 }
-async function confirmImport(){
-  if(!window._pendingImport)return;
-  const data=window._pendingImport;
-  S.blocks=data.blocks.map(b=>({id:b.id||uid(),name:b.name||'Bloco',words:(b.words||[]).map(w=>({id:w.id||uid(),en:w.en||'',pt:w.pt||'',sub:w.sub||1,starsQ:w.starsQ||0,starsT:w.starsT||0}))}));
-  await save();window._pendingImport=null;closeModal();toast('✓ Restaurado!','success');snd('master');
-  updateBackupStatus();renderBlocks();
+function confirmImport() {
+  if (!window._pendingImport) return;
+  const data = window._pendingImport;
+  S.blocks = data.blocks.map(b => ({ id: b.id || uid(), name: b.name || 'Bloco', words: (b.words || []).map(w => ({ id: w.id || uid(), en: w.en || '', pt: w.pt || '', sub: w.sub || 1, starsQ: w.starsQ || 0, starsT: w.starsT || 0 })) }));
+  save(); window._pendingImport = null; closeModal(); toast('✓ Restaurado!', 'success'); snd('master');
+  updateBackupStatus(); renderBlocks();
 }
 
-function openModal(t,b,a){document.getElementById('m-title').textContent=t;document.getElementById('m-body').innerHTML=b;document.getElementById('m-actions').innerHTML=a||'';document.getElementById('modal').style.display='flex';}
-function closeModal(){document.getElementById('modal').style.display='none';}
-function closeOut(e){if(e.target.id==='modal')closeModal();}
-function toast(msg,type){const t=document.getElementById('toast');t.textContent=msg;t.className='toast show'+(type?' '+type:'');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),3000);}
-function snd(type){
-  try{
-    const ctx=new(window.AudioContext||window.webkitAudioContext)();
-    const o=ctx.createOscillator(),g=ctx.createGain();
-    o.connect(g);g.connect(ctx.destination);const t=ctx.currentTime;
-    if(type==='nav'){o.type='sine';o.frequency.setValueAtTime(600,t);o.frequency.exponentialRampToValueAtTime(800,t+0.06);g.gain.setValueAtTime(0.12,t);g.gain.exponentialRampToValueAtTime(0.001,t+0.12);o.start();o.stop(t+0.12);}
-    else if(type==='click'){o.type='sine';o.frequency.setValueAtTime(900,t);o.frequency.exponentialRampToValueAtTime(700,t+0.05);g.gain.setValueAtTime(0.1,t);g.gain.exponentialRampToValueAtTime(0.001,t+0.08);o.start();o.stop(t+0.08);}
-    else if(type==='start'){o.type='sine';o.frequency.setValueAtTime(400,t);o.frequency.setValueAtTime(600,t+0.08);o.frequency.setValueAtTime(800,t+0.16);g.gain.setValueAtTime(0.15,t);g.gain.exponentialRampToValueAtTime(0.001,t+0.28);o.start();o.stop(t+0.28);}
-    else if(type==='add'){o.type='sine';o.frequency.setValueAtTime(520,t);o.frequency.exponentialRampToValueAtTime(780,t+0.12);g.gain.setValueAtTime(0.15,t);g.gain.exponentialRampToValueAtTime(0.001,t+0.18);o.start();o.stop(t+0.18);}
-    else if(type==='del'){o.type='sine';o.frequency.setValueAtTime(300,t);o.frequency.exponentialRampToValueAtTime(180,t+0.15);g.gain.setValueAtTime(0.12,t);g.gain.exponentialRampToValueAtTime(0.001,t+0.2);o.start();o.stop(t+0.2);}
-    else if(type==='correct'){o.type='sine';o.frequency.setValueAtTime(440,t);o.frequency.setValueAtTime(550,t+0.1);o.frequency.setValueAtTime(660,t+0.2);g.gain.setValueAtTime(0.18,t);g.gain.exponentialRampToValueAtTime(0.001,t+0.35);o.start();o.stop(t+0.35);}
-    else if(type==='wrong'){o.type='sawtooth';o.frequency.setValueAtTime(300,t);o.frequency.exponentialRampToValueAtTime(150,t+0.25);g.gain.setValueAtTime(0.14,t);g.gain.exponentialRampToValueAtTime(0.001,t+0.3);o.start();o.stop(t+0.3);}
-    else if(type==='master'){
-      const o2=ctx.createOscillator(),g2=ctx.createGain();o2.connect(g2);g2.connect(ctx.destination);
-      o.type='sine';o2.type='sine';
-      o.frequency.setValueAtTime(523,t);o.frequency.setValueAtTime(659,t+0.1);o.frequency.setValueAtTime(784,t+0.2);o.frequency.setValueAtTime(1047,t+0.3);
-      o2.frequency.setValueAtTime(659,t);o2.frequency.setValueAtTime(784,t+0.1);o2.frequency.setValueAtTime(988,t+0.2);o2.frequency.setValueAtTime(1319,t+0.3);
-      g.gain.setValueAtTime(0.18,t);g.gain.exponentialRampToValueAtTime(0.001,t+0.5);
-      g2.gain.setValueAtTime(0.12,t);g2.gain.exponentialRampToValueAtTime(0.001,t+0.5);
-      o.start();o.stop(t+0.5);o2.start();o2.stop(t+0.5);
+function openModal(t, b, a) { document.getElementById('m-title').textContent = t; document.getElementById('m-body').innerHTML = b; document.getElementById('m-actions').innerHTML = a || ''; document.getElementById('modal').style.display = 'flex'; }
+function closeModal() { document.getElementById('modal').style.display = 'none'; }
+function closeOut(e) { if (e.target.id === 'modal') closeModal(); }
+function toast(msg, type) { const t = document.getElementById('toast'); t.textContent = msg; t.className = 'toast show' + (type ? ' ' + type : ''); clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('show'), 3000); }
+function snd(type) {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.connect(g); g.connect(ctx.destination); const t = ctx.currentTime;
+    if (type === 'nav') { o.type = 'sine'; o.frequency.setValueAtTime(600, t); o.frequency.exponentialRampToValueAtTime(800, t + 0.06); g.gain.setValueAtTime(0.12, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.12); o.start(); o.stop(t + 0.12); }
+    else if (type === 'click') { o.type = 'sine'; o.frequency.setValueAtTime(900, t); o.frequency.exponentialRampToValueAtTime(700, t + 0.05); g.gain.setValueAtTime(0.1, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.08); o.start(); o.stop(t + 0.08); }
+    else if (type === 'start') { o.type = 'sine'; o.frequency.setValueAtTime(400, t); o.frequency.setValueAtTime(600, t + 0.08); o.frequency.setValueAtTime(800, t + 0.16); g.gain.setValueAtTime(0.15, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.28); o.start(); o.stop(t + 0.28); }
+    else if (type === 'add') { o.type = 'sine'; o.frequency.setValueAtTime(520, t); o.frequency.exponentialRampToValueAtTime(780, t + 0.12); g.gain.setValueAtTime(0.15, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.18); o.start(); o.stop(t + 0.18); }
+    else if (type === 'del') { o.type = 'sine'; o.frequency.setValueAtTime(300, t); o.frequency.exponentialRampToValueAtTime(180, t + 0.15); g.gain.setValueAtTime(0.12, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.2); o.start(); o.stop(t + 0.2); }
+    else if (type === 'correct') { o.type = 'sine'; o.frequency.setValueAtTime(440, t); o.frequency.setValueAtTime(550, t + 0.1); o.frequency.setValueAtTime(660, t + 0.2); g.gain.setValueAtTime(0.18, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.35); o.start(); o.stop(t + 0.35); }
+    else if (type === 'wrong') { o.type = 'sawtooth'; o.frequency.setValueAtTime(300, t); o.frequency.exponentialRampToValueAtTime(150, t + 0.25); g.gain.setValueAtTime(0.14, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.3); o.start(); o.stop(t + 0.3); }
+    else if (type === 'master') {
+      const o2 = ctx.createOscillator(), g2 = ctx.createGain(); o2.connect(g2); g2.connect(ctx.destination);
+      o.type = 'sine'; o2.type = 'sine';
+      o.frequency.setValueAtTime(523, t); o.frequency.setValueAtTime(659, t + 0.1); o.frequency.setValueAtTime(784, t + 0.2); o.frequency.setValueAtTime(1047, t + 0.3);
+      o2.frequency.setValueAtTime(659, t); o2.frequency.setValueAtTime(784, t + 0.1); o2.frequency.setValueAtTime(988, t + 0.2); o2.frequency.setValueAtTime(1319, t + 0.3);
+      g.gain.setValueAtTime(0.18, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+      g2.gain.setValueAtTime(0.12, t); g2.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+      o.start(); o.stop(t + 0.5); o2.start(); o2.stop(t + 0.5);
     }
-  }catch(e){}
+  } catch (e) { }
 }
+
+// Inicia o app carregando dados salvos do localStorage
 load();
 </script>
+</body>
+</html>
