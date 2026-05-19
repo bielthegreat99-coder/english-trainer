@@ -18,6 +18,10 @@
   .app{max-width:900px;margin:0 auto;padding:2rem 1.5rem;}
   .header{text-align:center;margin-bottom:2rem;}
   .header h1{font-family:var(--fh);font-size:2rem;font-weight:800;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:-0.5px;}
+  .sync-status{text-align:center;font-size:0.75rem;margin-top:0.3rem;color:var(--text3);}
+  .sync-status.ok{color:var(--success);}
+  .sync-status.err{color:var(--danger);}
+  .sync-status.loading{color:var(--warning);}
   .nav{display:flex;gap:0.5rem;justify-content:center;margin-bottom:2rem;flex-wrap:wrap;}
   .nav-btn{background:var(--bg3);border:1px solid var(--border);color:var(--text2);font-family:var(--fb);font-size:0.85rem;padding:0.5rem 1.1rem;border-radius:999px;cursor:pointer;transition:all 0.2s;}
   .nav-btn:hover{border-color:var(--border2);color:var(--text);}
@@ -159,8 +163,6 @@
   .dom-label{display:flex;justify-content:space-between;font-size:0.75rem;color:var(--text2);margin-bottom:3px;}
   .sub-dom-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:0.5rem;margin-top:0.6rem;}
   .sub-dom{background:var(--bg3);border:1px solid var(--border);border-radius:var(--rs);padding:0.4rem 0.3rem;text-align:center;}
-  .sub-dom-name{font-size:0.7rem;color:var(--text3);margin-bottom:3px;}
-  .sub-dom-pct{font-family:var(--fh);font-size:0.85rem;font-weight:700;}
   .mastered-badge{display:inline-block;background:linear-gradient(135deg,#f7b955,#f7d455);color:#1a1200;font-size:0.7rem;font-weight:700;padding:2px 8px;border-radius:999px;margin-left:0.5rem;}
   .dom-split{display:flex;gap:0.5rem;margin-top:0.3rem;flex-wrap:wrap;}
   .dom-chip{font-size:0.72rem;padding:2px 8px;border-radius:999px;border:1px solid var(--border);}
@@ -180,9 +182,11 @@
 </style>
 </head>
 <body>
-
 <div class="app">
-  <div class="header"><h1>Treinador de Inglês</h1></div>
+  <div class="header">
+    <h1>Treinador de Inglês</h1>
+    <div class="sync-status" id="sync-status">⏳ Conectando ao Supabase...</div>
+  </div>
   <div class="nav">
     <button class="nav-btn active" onclick="click_go('blocks')">📚 Blocos</button>
     <button class="nav-btn" onclick="click_go('quiz-home')">🎯 Praticar</button>
@@ -402,18 +406,18 @@
     <div class="card">
       <div class="stitle">💾 Backup e Restauração</div>
       <div class="backup-info">
-        <strong>Por que fazer backup?</strong><br>
-        Seus dados ficam salvos automaticamente no seu navegador, mas baixar um backup garante que você nunca perderá seu progresso. Guarde o arquivo em um lugar seguro. Para restaurar, basta importar o arquivo aqui.
+        <strong>Seus dados estão na nuvem!</strong><br>
+        Tudo que você adicionar aqui fica salvo automaticamente no Supabase e aparece em qualquer dispositivo. O backup abaixo é uma cópia extra de segurança — recomendado fazer periodicamente.
       </div>
       <div style="margin-bottom:1.5rem">
-        <h4 style="font-family:var(--fh);font-size:1rem;margin-bottom:0.5rem">📤 Exportar backup</h4>
+        <h4 style="font-family:var(--fh);font-size:1rem;margin-bottom:0.5rem">📤 Exportar backup local</h4>
         <div id="backup-status" style="font-size:0.8rem;color:var(--text3);margin-bottom:0.75rem"></div>
         <button class="btn bg-suc" onclick="snd('click');exportBackup()">⬇️ Baixar backup</button>
       </div>
       <hr style="border:none;border-top:1px solid var(--border);margin:1.5rem 0">
       <div>
         <h4 style="font-family:var(--fh);font-size:1rem;margin-bottom:0.5rem">📥 Importar backup</h4>
-        <p style="font-size:0.85rem;color:var(--text2);margin-bottom:0.75rem"><strong style="color:var(--warning)">Atenção:</strong> isso substituirá todos os dados atuais.</p>
+        <p style="font-size:0.85rem;color:var(--text2);margin-bottom:0.75rem"><strong style="color:var(--warning)">Atenção:</strong> isso substituirá todos os dados atuais na nuvem.</p>
         <input type="file" id="import-file" accept=".json,application/json" style="display:none" onchange="onFileSelected(event)">
         <button class="btn bg-warn" onclick="snd('click');document.getElementById('import-file').click()">⬆️ Selecionar arquivo</button>
       </div>
@@ -428,16 +432,76 @@
 
 <script>
 // ============================================
-// PERSISTÊNCIA: usa localStorage do navegador
-// Os dados ficam salvos mesmo após fechar/recarregar
+// CONFIGURAÇÃO SUPABASE
 // ============================================
-const SK = 'eng_trainer_v2_data';
+const SUPA_URL = 'https://gdlvzgmexosloqqfuypu.supabase.co';
+const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdkbHZ6Z21leG9zbG9xcWZ1eXB1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkxOTgwMDgsImV4cCI6MjA5NDc3NDAwOH0.-EHtutrPXg858o5abFWc5roN6y9tMBc6-5oAkwW2qWM';
+const TABLE = 'trainer_data';
+const USER_KEY = 'biel_trainer_v1';
 
+function supa(method, body) {
+  const opts = {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': SUPA_KEY,
+      'Authorization': 'Bearer ' + SUPA_KEY,
+      'Prefer': method === 'POST' ? 'resolution=merge-duplicates,return=representation' : 'return=representation'
+    }
+  };
+  if (body) opts.body = JSON.stringify(body);
+  const url = SUPA_URL + '/rest/v1/' + TABLE;
+  return fetch(url + (method === 'GET' ? '?user_key=eq.' + USER_KEY + '&select=data' : ''), opts);
+}
+
+async function cloudLoad() {
+  try {
+    setSyncStatus('loading', '⏳ Carregando dados...');
+    const res = await supa('GET');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const rows = await res.json();
+    if (rows && rows.length > 0) {
+      const parsed = JSON.parse(rows[0].data);
+      S = { ...S, ...parsed };
+    }
+    setSyncStatus('ok', '☁️ Sincronizado com a nuvem');
+  } catch (e) {
+    console.error('Erro ao carregar:', e);
+    setSyncStatus('err', '❌ Sem conexão — usando dados locais');
+    const local = localStorage.getItem('eng_trainer_v2_data');
+    if (local) S = { ...S, ...JSON.parse(local) };
+  }
+  renderBlocks();
+  updateBackupStatus();
+}
+
+async function cloudSave() {
+  const data = JSON.stringify({ blocks: S.blocks });
+  localStorage.setItem('eng_trainer_v2_data', data);
+  try {
+    const res = await supa('POST', { user_key: USER_KEY, data });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    setSyncStatus('ok', '☁️ Salvo na nuvem');
+  } catch (e) {
+    console.error('Erro ao salvar:', e);
+    setSyncStatus('err', '⚠️ Salvo localmente (sem conexão)');
+  }
+}
+
+function setSyncStatus(type, msg) {
+  const el = document.getElementById('sync-status');
+  el.textContent = msg;
+  el.className = 'sync-status ' + type;
+}
+
+// ============================================
+// APP
+// ============================================
+const MAX = 3;
 let S = { blocks: [], curBlock: null, curSub: 0 };
 let Q = { block: null, scope: 'full', subNum: 1, dir: 'en', mode: 'quiz', words: [], idx: 0, correct: 0, wrong: 0, answered: false, newQ: 0, newT: 0 };
 let promptType = 'narrative';
 
-const MAX = 3;
 const stars = n => n === 0 ? '⬜⬜⬜' : n === 1 ? '⭐⬜⬜' : n === 2 ? '⭐⭐⬜' : '⭐⭐⭐';
 const domPct = (words, mode) => {
   if (!words || !words.length) return 0;
@@ -445,31 +509,6 @@ const domPct = (words, mode) => {
   const t = words.reduce((s, w) => s + (w[k] || 0), 0);
   return Math.round((t / (words.length * MAX)) * 100);
 };
-
-// CARREGA os dados salvos no localStorage ao iniciar
-function load() {
-  try {
-    const raw = localStorage.getItem(SK);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      S = { ...S, ...parsed };
-    }
-  } catch (e) {
-    console.error('Erro ao carregar dados:', e);
-  }
-  renderBlocks();
-  updateBackupStatus();
-}
-
-// SALVA os dados no localStorage sempre que algo muda
-function save() {
-  try {
-    localStorage.setItem(SK, JSON.stringify({ blocks: S.blocks }));
-  } catch (e) {
-    console.error('Erro ao salvar dados:', e);
-    toast('Erro ao salvar! Espaço cheio?', 'error');
-  }
-}
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 const shuffle = a => [...a].sort(() => Math.random() - 0.5);
@@ -492,10 +531,7 @@ function go(name) {
 
 function renderBlocks() {
   const g = document.getElementById('blocks-grid');
-  if (!S.blocks.length) {
-    g.innerHTML = '<div class="empty" style="grid-column:1/-1"><div style="font-size:2rem">📚</div><p>Nenhum bloco criado ainda!</p></div>';
-    return;
-  }
+  if (!S.blocks.length) { g.innerHTML = '<div class="empty" style="grid-column:1/-1"><div style="font-size:2rem">📚</div><p>Nenhum bloco criado ainda!</p></div>'; return; }
   g.innerHTML = S.blocks.map(b => {
     const t = (b.words || []).length, p = Math.round((t / 100) * 100);
     const dq = domPct(b.words, 'quiz'), dt = domPct(b.words, 'type');
@@ -577,7 +613,7 @@ function renderStats() {
       + '<div class="pbw" style="margin-bottom:6px"><div class="pb" style="width:' + dq + '%"></div></div>'
       + '<div class="dom-label"><span style="color:var(--accent2)">⌨️ Digitação</span><span>' + dt + '%</span></div>'
       + '<div class="pbw" style="margin-bottom:6px"><div class="pb pb-gold" style="width:' + dt + '%"></div></div>'
-      + '<div class="sub-dom-grid">' + subs.map((s, i) => '<div class="sub-dom"><div class="sub-dom-name">Sub ' + (i + 1) + '</div>'
+      + '<div class="sub-dom-grid">' + subs.map((s, i) => '<div class="sub-dom"><div style="font-size:0.7rem;color:var(--text3);margin-bottom:3px">Sub ' + (i + 1) + ' (' + s.count + ')</div>'
         + '<div style="font-size:0.7rem;color:var(--accent)">Q:' + s.dq + '%</div>'
         + '<div style="font-size:0.7rem;color:var(--accent2)">D:' + s.dt + '%</div></div>').join('') + '</div></div>';
   }).join('') || '<div class="empty"><p>Nenhum bloco ainda.</p></div>';
@@ -593,29 +629,27 @@ function addWord() {
   if (b.words.length >= 100) { toast('Bloco já tem 100 palavras!', 'error'); return; }
   b.words.push({ id: uid(), en, pt, sub, starsQ: 0, starsT: 0 });
   document.getElementById('nw-en').value = ''; document.getElementById('nw-pt').value = '';
-  save(); renderDetail(); toast('"' + en + '" adicionada!', 'success'); snd('add');
+  cloudSave(); renderDetail(); toast('"' + en + '" adicionada!', 'success'); snd('add');
 }
-function delWord(wid) { const b = S.blocks.find(x => x.id === S.curBlock); if (!b) return; b.words = b.words.filter(w => w.id !== wid); save(); renderDetail(); snd('del'); }
-function delWordG(bid, wid) { const b = S.blocks.find(x => x.id === bid); if (!b) return; b.words = b.words.filter(w => w.id !== wid); save(); renderAll(); snd('del'); }
+function delWord(wid) { const b = S.blocks.find(x => x.id === S.curBlock); if (!b) return; b.words = b.words.filter(w => w.id !== wid); cloudSave(); renderDetail(); snd('del'); }
+function delWordG(bid, wid) { const b = S.blocks.find(x => x.id === bid); if (!b) return; b.words = b.words.filter(w => w.id !== wid); cloudSave(); renderAll(); snd('del'); }
 
 function resetWord(wid) {
   const b = S.blocks.find(x => x.id === S.curBlock); if (!b) return;
   const w = (b.words || []).find(x => x.id === wid); if (!w) return;
-  openModal('Zerar progresso da palavra',
-    '<p style="color:var(--text2);font-size:0.9rem">Zerar todas as estrelas (Quiz e Digitação) de <strong style="color:var(--text)">"' + w.en + '"</strong>?</p>',
+  openModal('Zerar progresso da palavra', '<p style="color:var(--text2);font-size:0.9rem">Zerar todas as estrelas de <strong style="color:var(--text)">"' + w.en + '"</strong>?</p>',
     '<button class="btn bs" onclick="snd(\'click\');closeModal()">Cancelar</button><button class="btn b-reset" onclick="snd(\'click\');confirmResetWord(\'' + S.curBlock + '\',\'' + wid + '\',\'detail\')">Zerar</button>');
 }
 function resetWordG(bid, wid) {
   const b = S.blocks.find(x => x.id === bid); if (!b) return;
   const w = (b.words || []).find(x => x.id === wid); if (!w) return;
-  openModal('Zerar progresso da palavra',
-    '<p style="color:var(--text2);font-size:0.9rem">Zerar todas as estrelas (Quiz e Digitação) de <strong style="color:var(--text)">"' + w.en + '"</strong>?</p>',
+  openModal('Zerar progresso da palavra', '<p style="color:var(--text2);font-size:0.9rem">Zerar todas as estrelas de <strong style="color:var(--text)">"' + w.en + '"</strong>?</p>',
     '<button class="btn bs" onclick="snd(\'click\');closeModal()">Cancelar</button><button class="btn b-reset" onclick="snd(\'click\');confirmResetWord(\'' + bid + '\',\'' + wid + '\',\'all\')">Zerar</button>');
 }
 function confirmResetWord(bid, wid, context) {
   const b = S.blocks.find(x => x.id === bid); if (!b) return;
   const w = (b.words || []).find(x => x.id === wid); if (!w) return;
-  w.starsQ = 0; w.starsT = 0; save(); closeModal();
+  w.starsQ = 0; w.starsT = 0; cloudSave(); closeModal();
   if (context === 'detail') renderDetail(); else renderAll();
   toast('↺ Progresso zerado.', 'success');
 }
@@ -623,26 +657,24 @@ function confirmResetSub() {
   const b = S.blocks.find(x => x.id === S.curBlock); if (!b) return;
   const subWords = (b.words || []).filter(w => w.sub === S.curSub);
   if (!subWords.length) { toast('Sub-bloco vazio.', 'error'); return; }
-  openModal('Zerar progresso do Sub-bloco ' + S.curSub,
-    '<p style="color:var(--text2);font-size:0.9rem">Zerar estrelas de <strong style="color:var(--text)">' + subWords.length + ' palavra(s)</strong>?</p>',
+  openModal('Zerar Sub-bloco ' + S.curSub, '<p style="color:var(--text2);font-size:0.9rem">Zerar estrelas de <strong style="color:var(--text)">' + subWords.length + ' palavra(s)</strong>?</p>',
     '<button class="btn bs" onclick="snd(\'click\');closeModal()">Cancelar</button><button class="btn b-reset" onclick="snd(\'click\');doResetSub()">Zerar</button>');
 }
 function doResetSub() {
   const b = S.blocks.find(x => x.id === S.curBlock); if (!b) return;
   let count = 0; (b.words || []).forEach(w => { if (w.sub === S.curSub) { w.starsQ = 0; w.starsT = 0; count++; } });
-  save(); closeModal(); renderDetail(); toast('↺ ' + count + ' palavra(s) zerada(s).', 'success');
+  cloudSave(); closeModal(); renderDetail(); toast('↺ ' + count + ' palavra(s) zerada(s).', 'success');
 }
 function confirmResetBlock() {
   const b = S.blocks.find(x => x.id === S.curBlock); if (!b) return;
   const total = (b.words || []).length; if (!total) { toast('Bloco vazio.', 'error'); return; }
-  openModal('Zerar progresso do bloco',
-    '<p style="color:var(--text2);font-size:0.9rem">Zerar estrelas de <strong style="color:var(--text)">' + total + ' palavra(s)</strong> do bloco?</p>',
+  openModal('Zerar bloco', '<p style="color:var(--text2);font-size:0.9rem">Zerar estrelas de <strong style="color:var(--text)">' + total + ' palavra(s)</strong>?</p>',
     '<button class="btn bs" onclick="snd(\'click\');closeModal()">Cancelar</button><button class="btn b-reset" onclick="snd(\'click\');doResetBlock()">Zerar</button>');
 }
 function doResetBlock() {
   const b = S.blocks.find(x => x.id === S.curBlock); if (!b) return;
   (b.words || []).forEach(w => { w.starsQ = 0; w.starsT = 0; });
-  save(); closeModal(); renderDetail(); toast('↺ Progresso zerado!', 'success');
+  cloudSave(); closeModal(); renderDetail(); toast('↺ Progresso zerado!', 'success');
 }
 
 function openPromptModal(scope) {
@@ -653,82 +685,47 @@ function openPromptModal(scope) {
   const scopeLabel = scope === 'sub' ? ('Sub-bloco ' + S.curSub) : 'Bloco completo';
   promptType = 'narrative';
   openModal('📝 Gerar prompt — ' + scopeLabel,
-    '<div class="prompt-info"><strong>Como funciona:</strong> escolha o tipo de texto, copie o prompt gerado e cole em qualquer chatbot de IA (Claude, ChatGPT, Gemini, etc.). A IA vai criar um texto avançado em inglês com estas <strong>' + words.length + '</strong> palavra(s), com tradução parágrafo por parágrafo.</div>'
+    '<div class="prompt-info"><strong>Como funciona:</strong> escolha o tipo, copie o prompt e cole em qualquer chatbot de IA. A IA vai criar um texto avançado em inglês com estas <strong>' + words.length + '</strong> palavra(s), com tradução parágrafo por parágrafo.</div>'
     + '<div style="font-size:0.85rem;color:var(--text2);margin-bottom:0.5rem">1. Tipo de texto:</div>'
     + '<div class="type-choice">'
-    + '<div class="type-choice-btn sel" id="pt-narrative" onclick="snd(\'click\');setPromptType(\'narrative\')">'
-    + '<div class="ic">📖</div><div class="nm">Narrativa</div><div class="ds">História curta com começo, meio e fim</div></div>'
-    + '<div class="type-choice-btn" id="pt-dialogue" onclick="snd(\'click\');setPromptType(\'dialogue\')">'
-    + '<div class="ic">💬</div><div class="nm">Diálogo</div><div class="ds">Conversa entre 2 ou mais personagens</div></div>'
+    + '<div class="type-choice-btn sel" id="pt-narrative" onclick="snd(\'click\');setPromptType(\'narrative\')"><div class="ic">📖</div><div class="nm">Narrativa</div><div class="ds">História com começo, meio e fim</div></div>'
+    + '<div class="type-choice-btn" id="pt-dialogue" onclick="snd(\'click\');setPromptType(\'dialogue\')"><div class="ic">💬</div><div class="nm">Diálogo</div><div class="ds">Conversa entre personagens</div></div>'
     + '</div>'
-    + '<div style="font-size:0.85rem;color:var(--text2);margin-bottom:0.5rem;margin-top:1rem">2. Prompt gerado (clique para copiar):</div>'
+    + '<div style="font-size:0.85rem;color:var(--text2);margin-bottom:0.5rem;margin-top:1rem">2. Prompt gerado:</div>'
     + '<textarea id="prompt-output" readonly></textarea>',
     '<button class="btn bs" onclick="snd(\'click\');closeModal()">Fechar</button>'
     + '<button class="btn bp" onclick="snd(\'click\');copyPrompt()">📋 Copiar prompt</button>');
   window._promptWords = words;
-  window._promptScope = scope;
   updatePromptText();
 }
-
 function setPromptType(t) {
   promptType = t;
   document.getElementById('pt-narrative').classList.toggle('sel', t === 'narrative');
   document.getElementById('pt-dialogue').classList.toggle('sel', t === 'dialogue');
   updatePromptText();
 }
-
 function updatePromptText() {
   const words = window._promptWords || [];
   const wordList = words.map((w, i) => (i + 1) + '. ' + w.en + ' — ' + w.pt).join('\n');
   let template = '';
   if (promptType === 'narrative') {
-    template = 'Por favor, gere uma NARRATIVA em INGLÊS com nível AVANÇADO, usando OBRIGATORIAMENTE todas as palavras/expressões abaixo de forma natural e contextualizada. A história deve ter começo, meio e fim claros, em torno de 4 a 6 parágrafos.\n\n'
-      + 'REGRAS IMPORTANTES:\n'
-      + '- Use cada palavra em pelo menos uma vez (pode usar mais).\n'
-      + '- Destaque as palavras-alvo com **negrito** quando aparecerem no texto.\n'
-      + '- Após cada parágrafo em inglês, forneça a tradução completa para o português brasileiro entre parênteses, no parágrafo seguinte.\n'
-      + '- Use vocabulário e estruturas gramaticais avançadas.\n'
-      + '- A narrativa deve ser coerente, envolvente e fazer sentido como história real.\n\n'
-      + 'PALAVRAS A USAR:\n' + wordList + '\n\n'
-      + 'FORMATO DE SAÍDA:\n[Parágrafo 1 em inglês com palavras em **negrito**]\n[Tradução do parágrafo 1 em português]\n\n[Parágrafo 2 em inglês com palavras em **negrito**]\n[Tradução do parágrafo 2 em português]\n\n... e assim por diante.';
+    template = 'Por favor, gere uma NARRATIVA em INGLÊS com nível AVANÇADO, usando OBRIGATORIAMENTE todas as palavras/expressões abaixo de forma natural. A história deve ter começo, meio e fim claros, em torno de 4 a 6 parágrafos.\n\nREGRAS:\n- Use cada palavra pelo menos uma vez.\n- Destaque as palavras-alvo com **negrito**.\n- Após cada parágrafo em inglês, forneça a tradução em português no parágrafo seguinte.\n- Use vocabulário e estruturas avançadas.\n\nPALAVRAS A USAR:\n' + wordList + '\n\nFORMATO:\n[Parágrafo 1 em inglês]\n[Tradução do parágrafo 1]\n\n[Parágrafo 2 em inglês]\n[Tradução do parágrafo 2]\n\n... e assim por diante.';
   } else {
-    template = 'Por favor, gere um DIÁLOGO em INGLÊS com nível AVANÇADO entre 2 ou 3 personagens, usando OBRIGATORIAMENTE todas as palavras/expressões abaixo de forma natural e contextualizada. O diálogo deve ter contexto/cena, conflito ou tópico claro, e desfecho.\n\n'
-      + 'REGRAS IMPORTANTES:\n'
-      + '- Use cada palavra pelo menos uma vez (pode usar mais).\n'
-      + '- Destaque as palavras-alvo com **negrito** quando aparecerem nas falas.\n'
-      + '- Comece com uma breve descrição da cena em inglês (1-2 linhas) com tradução logo abaixo.\n'
-      + '- Após cada bloco de 2-4 falas em inglês, forneça a tradução para o português brasileiro logo abaixo.\n'
-      + '- Use vocabulário e estruturas gramaticais avançadas, incluindo expressões idiomáticas, gírias apropriadas, contractions e linguagem natural.\n'
-      + '- O diálogo deve ser coerente e parecer uma conversa real entre pessoas.\n\n'
-      + 'PALAVRAS A USAR:\n' + wordList + '\n\n'
-      + 'FORMATO DE SAÍDA:\n[Cena em inglês]\n[Tradução da cena]\n\n[Personagem 1]: [fala 1 em inglês com palavras em **negrito**]\n[Personagem 2]: [fala 2 em inglês com palavras em **negrito**]\n[Tradução das falas acima]\n\n... e assim por diante até o final.';
+    template = 'Por favor, gere um DIÁLOGO em INGLÊS com nível AVANÇADO entre 2 ou 3 personagens, usando OBRIGATORIAMENTE todas as palavras abaixo. O diálogo deve ter contexto, conflito e desfecho.\n\nREGRAS:\n- Use cada palavra pelo menos uma vez.\n- Destaque as palavras-alvo com **negrito**.\n- Comece com uma descrição da cena em inglês com tradução abaixo.\n- Após cada bloco de falas, forneça a tradução em português.\n- Use linguagem natural, contractions e expressões idiomáticas.\n\nPALAVRAS A USAR:\n' + wordList + '\n\nFORMATO:\n[Cena em inglês]\n[Tradução da cena]\n\n[Personagem 1]: [fala]\n[Personagem 2]: [fala]\n[Tradução das falas]\n\n... e assim por diante.';
   }
   const out = document.getElementById('prompt-output');
   if (out) out.value = template;
 }
-
 function copyPrompt() {
   const out = document.getElementById('prompt-output'); if (!out) return;
-  out.select(); out.setSelectionRange(0, 99999);
-  try {
-    navigator.clipboard.writeText(out.value).then(() => {
-      toast('✓ Prompt copiado para a área de transferência!', 'success');
-      snd('master');
-    }).catch(() => {
-      document.execCommand('copy');
-      toast('✓ Prompt copiado!', 'success'); snd('master');
-    });
-  } catch (e) {
-    document.execCommand('copy');
-    toast('✓ Prompt copiado!', 'success'); snd('master');
-  }
+  navigator.clipboard.writeText(out.value).then(() => { toast('✓ Prompt copiado!', 'success'); snd('master'); }).catch(() => { out.select(); document.execCommand('copy'); toast('✓ Prompt copiado!', 'success'); snd('master'); });
 }
 
 function delBlock(id) {
   openModal('Apagar bloco', '<p style="color:var(--text2);font-size:0.9rem">Tem certeza? Tudo será apagado.</p>',
     '<button class="btn bs" onclick="snd(\'click\');closeModal()">Cancelar</button><button class="btn bd" onclick="snd(\'click\');confDelBlock(\'' + id + '\')">Apagar</button>');
 }
-function confDelBlock(id) { S.blocks = S.blocks.filter(b => b.id !== id); save(); closeModal(); renderBlocks(); }
+function confDelBlock(id) { S.blocks = S.blocks.filter(b => b.id !== id); cloudSave(); closeModal(); renderBlocks(); }
 function delCurBlock() { const id = S.curBlock; go('blocks'); delBlock(id); }
 function openNewBlock() {
   openModal('Criar novo bloco', '<input type="text" id="m-bname" placeholder="Nome do bloco" style="width:100%">',
@@ -737,7 +734,7 @@ function openNewBlock() {
 }
 function confNewBlock() {
   const n = document.getElementById('m-bname').value.trim(); if (!n) { toast('Digite um nome.', 'error'); return; }
-  S.blocks.push({ id: uid(), name: n, words: [] }); save(); closeModal(); renderBlocks(); toast('"' + n + '" criado!', 'success'); snd('add');
+  S.blocks.push({ id: uid(), name: n, words: [] }); cloudSave(); closeModal(); renderBlocks(); toast('"' + n + '" criado!', 'success'); snd('add');
 }
 function openRename() {
   const b = S.blocks.find(x => x.id === S.curBlock);
@@ -745,15 +742,14 @@ function openRename() {
     '<button class="btn bs" onclick="snd(\'click\');closeModal()">Cancelar</button><button class="btn bp" onclick="snd(\'click\');confRename()">Salvar</button>');
   setTimeout(() => { const i = document.getElementById('m-rname'); if (i) { i.focus(); i.select(); } }, 100);
 }
-function confRename() { const n = document.getElementById('m-rname').value.trim(); if (!n) return; S.blocks.find(x => x.id === S.curBlock).name = n; save(); closeModal(); renderDetail(); toast('Renomeado!', 'success'); }
+function confRename() { const n = document.getElementById('m-rname').value.trim(); if (!n) return; S.blocks.find(x => x.id === S.curBlock).name = n; cloudSave(); closeModal(); renderDetail(); toast('Renomeado!', 'success'); }
 
 function renderQuizHome() {
   const list = document.getElementById('quiz-block-list');
   if (!S.blocks.length) { list.innerHTML = '<div class="empty"><p>Crie blocos primeiro!</p></div>'; return; }
   list.innerHTML = S.blocks.map(b => {
     const t = (b.words || []).length, dq = domPct(b.words, 'quiz'), dt = domPct(b.words, 'type');
-    return '<div class="setup-option' + (Q.block === b.id ? ' sel' : '') + '" onclick="snd(\'click\');selectQuizBlock(\'' + b.id + '\',this)">'
-      + '<h4>' + b.name + '</h4><p>' + t + ' palavras &nbsp;·&nbsp; 🔤 ' + dq + '% &nbsp; ⌨️ ' + dt + '%</p></div>';
+    return '<div class="setup-option' + (Q.block === b.id ? ' sel' : '') + '" onclick="snd(\'click\');selectQuizBlock(\'' + b.id + '\',this)"><h4>' + b.name + '</h4><p>' + t + ' palavras &nbsp;·&nbsp; 🔤 ' + dq + '% &nbsp; ⌨️ ' + dt + '%</p></div>';
   }).join('');
   document.getElementById('quiz-extra').style.display = Q.block ? 'block' : 'none';
   document.getElementById('sub-selector').style.display = Q.scope === 'sub' ? 'grid' : 'none';
@@ -783,7 +779,7 @@ function applyResult(wid, isCorrect) {
   const key = Q.mode === 'quiz' ? 'starsQ' : 'starsT'; const prev = w[key] || 0;
   if (isCorrect) { if (prev < MAX) { w[key] = prev + 1; if (w[key] === MAX) { if (Q.mode === 'quiz') Q.newQ++; else Q.newT++; snd('master'); } } }
   else { if (prev > 0) w[key] = 0; }
-  save();
+  cloudSave();
 }
 function updateDomDisplay(wid, pfx) {
   const b = S.blocks.find(x => x.id === Q.block); const w = (b?.words || []).find(x => x.id === wid); if (!w) return;
@@ -919,7 +915,7 @@ function onFileSelected(event) {
       if (!data.blocks || !Array.isArray(data.blocks)) { toast('Arquivo inválido.', 'error'); return; }
       let totalWords = 0; data.blocks.forEach(b => { totalWords += (b.words || []).length; });
       openModal('Confirmar importação',
-        '<p style="color:var(--text2);font-size:0.9rem">Encontrado: <strong style="color:var(--text)">' + data.blocks.length + '</strong> bloco(s), <strong style="color:var(--text)">' + totalWords + '</strong> palavra(s).</p><p style="color:var(--warning);font-size:0.85rem;margin-top:0.5rem">⚠ Dados atuais serão substituídos.</p>',
+        '<p style="color:var(--text2);font-size:0.9rem">Encontrado: <strong style="color:var(--text)">' + data.blocks.length + '</strong> bloco(s), <strong style="color:var(--text)">' + totalWords + '</strong> palavra(s).</p><p style="color:var(--warning);font-size:0.85rem;margin-top:0.5rem">⚠ Dados atuais na nuvem serão substituídos.</p>',
         '<button class="btn bs" onclick="snd(\'click\');closeModal();document.getElementById(\'import-file\').value=\'\'">Cancelar</button><button class="btn bp" onclick="snd(\'click\');confirmImport()">Importar</button>');
       window._pendingImport = data;
     } catch (err) { toast('Arquivo inválido.', 'error'); }
@@ -931,7 +927,8 @@ function confirmImport() {
   if (!window._pendingImport) return;
   const data = window._pendingImport;
   S.blocks = data.blocks.map(b => ({ id: b.id || uid(), name: b.name || 'Bloco', words: (b.words || []).map(w => ({ id: w.id || uid(), en: w.en || '', pt: w.pt || '', sub: w.sub || 1, starsQ: w.starsQ || 0, starsT: w.starsT || 0 })) }));
-  save(); window._pendingImport = null; closeModal(); toast('✓ Restaurado!', 'success'); snd('master');
+  cloudSave(); window._pendingImport = null; closeModal();
+  toast('✓ Restaurado e salvo na nuvem!', 'success'); snd('master');
   updateBackupStatus(); renderBlocks();
 }
 
@@ -963,8 +960,7 @@ function snd(type) {
   } catch (e) { }
 }
 
-// Inicia o app carregando dados salvos do localStorage
-load();
+cloudLoad();
 </script>
 </body>
 </html>
