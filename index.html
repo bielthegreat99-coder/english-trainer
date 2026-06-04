@@ -715,9 +715,21 @@ function openModal(t,b,a){document.getElementById('m-title').textContent=t;docum
 function closeModal(){document.getElementById('modal').style.display='none';}
 function closeOut(e){if(e.target.id==='modal')closeModal();}
 function toast(msg,type){const t=document.getElementById('toast');t.textContent=msg;t.className='toast show'+(type?' '+type:'');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),3000);}
+// AudioContext persistente — criado uma vez e reutilizado sempre
+let _audioCtx = null;
+function getCtx() {
+  if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (_audioCtx.state === 'suspended') _audioCtx.resume();
+  return _audioCtx;
+}
+// Desbloqueia o áudio no primeiro toque/clique do usuário
+document.addEventListener('click', () => { try { getCtx(); } catch(e){} }, { once: false });
+document.addEventListener('touchstart', () => { try { getCtx(); } catch(e){} }, { once: false });
+
 function snd(type){
   try{
-    const ctx=new(window.AudioContext||window.webkitAudioContext)();
+    const ctx = getCtx();
+    if (!ctx) return;
     const o=ctx.createOscillator(),g=ctx.createGain();
     o.connect(g);g.connect(ctx.destination);const t=ctx.currentTime;
     if(type==='nav'){o.type='sine';o.frequency.setValueAtTime(600,t);o.frequency.exponentialRampToValueAtTime(800,t+0.06);g.gain.setValueAtTime(0.12,t);g.gain.exponentialRampToValueAtTime(0.001,t+0.12);o.start();o.stop(t+0.12);}
